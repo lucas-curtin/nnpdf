@@ -33,6 +33,8 @@ results_dir.mkdir(parents=True, exist_ok=True)
 plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
+image_dir = Path("images")
+
 # %%
 # 1. DATA LOADING & PREPROCESSING—PART 1: FETCH RAW TABLES
 # ------------------------------------------------------------------------------
@@ -184,7 +186,7 @@ for i, x in enumerate(xgrid):
     t3_true[i] = (u - ub) - (d - db)
 
 # 2) Convolution ⇒ noiseless pseudo-data:
-y_theory = W @ t3_true  # shape (N,)
+y_theory = W @ (t3_true)  # shape (N,)
 
 # 3) Add experimental noise drawn from Cyy:
 rng = np.random.default_rng(seed=451)  # you can set seed if you want reproducible “data”
@@ -245,8 +247,9 @@ plt.title(
 
 plt.legend(loc="upper right", frameon=True, edgecolor="k")
 plt.grid(alpha=0.2)
-plt.tight_layout()
+plt.savefig(image_dir / "real_vs_theory.png", bbox_inches="tight")
 plt.show()
+
 
 # %%
 # ? Heatmap
@@ -293,7 +296,7 @@ ax.set_title(r"Mean Difference: $\langle\,y_{\rm data} - y_{\rm theory}\rangle$"
 ax.set_xlabel(r"$x$")
 ax.set_ylabel(r"$Q^2\,[\mathrm{GeV}^2]$")
 
-plt.tight_layout()
+plt.savefig(image_dir / "mean_difference_theory.png", bbox_inches="tight")
 plt.show()
 
 # %%
@@ -330,6 +333,7 @@ plt.ylabel(r"$\frac{y_{theory}}{y_{data}}$")
 plt.title(r"Comparison of $y_{theory}$ vs.\ $y_{data}$ (with relative errors)")
 plt.legend(loc="upper right")
 plt.grid(alpha=0.3)
+plt.savefig(image_dir / "data_theory_error_comp.png", bbox_inches="tight")
 plt.show()
 
 # %%
@@ -371,7 +375,7 @@ ax_d.set_title("BCDMS $F_2^d$")
 ax_d.grid(which="both", alpha=0.3)
 
 plt.suptitle("Kinematic Coverage of BCDMS $F_2^p$ and $F_2^d$", y=1.02)
-plt.tight_layout()
+plt.savefig(image_dir / "kineamtic_coverage.png", bbox_inches="tight")
 plt.show()
 
 # %%
@@ -830,7 +834,7 @@ for cfg_key, ax in comparison_map.items():
     ax.grid(alpha=0.2)
     ax.legend(fontsize=10)
 
-plt.tight_layout()
+plt.savefig(image_dir / "realvspseudofit.png", bbox_inches="tight")
 plt.show()
 # %%
 # ---------------------------------------------------------------------
@@ -910,7 +914,7 @@ for cfg_key, ax in pseudo_map.items():
     ax.grid(alpha=0.2)
     ax.legend(fontsize=10)
 
-plt.tight_layout()
+plt.savefig(image_dir / "sensitivity_scan.png", bbox_inches="tight")
 plt.show()
 # %%
 # ---------------------------------------------------------------------
@@ -1023,7 +1027,7 @@ ax_right.add_artist(legend1)
 # Create a second legend for C_true ⇒ color mapping
 ax_right.legend(title="$C_{true}$", loc="lower left")
 
-plt.tight_layout()
+plt.savefig(image_dir / "alpha_beta_comp.png", bbox_inches="tight")
 plt.show()
 
 
@@ -1119,7 +1123,7 @@ fig.legend(
 )
 
 plt.suptitle("Raw $C_{\\rm fit}$ Distributions with Mean, Std, and True Value", y=1.10, fontsize=14)
-plt.tight_layout()
+plt.savefig(image_dir / "histograms.png", bbox_inches="tight")
 plt.show()
 
 # %%
