@@ -15,6 +15,7 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 from loguru import logger
 from matplotlib.lines import Line2D
+from matplotlib.patches import Ellipse, Patch
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import Adam
@@ -484,11 +485,10 @@ K2_unit = K2_raw / np.max(np.abs(K2_raw))
 K_dict = {
     "ansatz1": torch.tensor(K1_unit, dtype=torch.float32, device=device),
     "ansatz2": torch.tensor(K2_unit, dtype=torch.float32, device=device),
-    "noansatz": torch.zeros(len(q2_vals), dtype=torch.float32, device=device),
 }
 
 # ─── 2) DEFINE GRID OF “TRUE” C VALUES FOR SENSITIVITY SCAN ───
-C_trues = [0.001, 0.1, 1]
+C_trues = [0.0, 0.1, 1]
 
 # ─── 3) BUILD CONFIG DICTIONARY INCLUDING ORIGINAL FITS + SENSITIVITY SCANS ───
 config = {
@@ -523,22 +523,6 @@ config = {
         "lambda_sr": 10000.0,
         "bsm": False,
         "ansatz": None,
-        "C_true": 0.0,
-    },
-    "sens_noansatz_C0": {
-        "name": "Pseudo-Replica BSM (No Ansatz), $C_{true}=0e0$",
-        "input_key": "pseudo_replica",
-        "n_hidden": 30,
-        "n_layers": 3,
-        "dropout": 0.2,
-        "lr": 1e-3,
-        "weight_decay": 1e-4,
-        "patience": 500,
-        "num_epochs": 5000,
-        "n_replicas": 100,
-        "lambda_sr": 10000.0,
-        "bsm": True,
-        "ansatz": "noansatz",
         "C_true": 0.0,
     },
 }
@@ -752,80 +736,58 @@ df_results.to_pickle("training_results.pkl")
 
 # %%
 # ─── 7) LOAD FOR PLOTTING ───
-df_plot = (
-    pd.read_pickle("training_results.pkl")
-    .reset_index()
-    .loc[
-        lambda df: ~df["config_key"].isin(
-            ["sens_noansatz_C1e-03", "sens_noansatz_C1e-01", "sens_noansatz_C1e+00"],
-        )
-    ]
-).loc[lambda df: (df["chi2_pt"] < 1.1) & (df["chi2_pt"] > 0.9)]
 
+df_raw = pd.read_pickle("training_results.pkl").reset_index()
+
+df_results = df_raw.loc[lambda df: (df["chi2_pt"] < 1.1) & (df["chi2_pt"] > 0.9)]
+# %%
 # ---------------------------------------------------------------------
-# 8a) PLOTTING: 1x2 COMPARISON — Real Data Fit vs. Pseudo-Data Fit
+# 8a) UPDATED PLOTTING: 1x2 COMPARISON WITH INLINE METRICS
 # ---------------------------------------------------------------------
 fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5), sharex=True, sharey=True)
 comparison_keys = ["fit_real_real", "fit_pseudo_replica"]
-comparison_map = {
-    "fit_real_real": axes[0],
-    "fit_pseudo_replica": axes[1],
+comparison_map = dict(zip(comparison_keys, axes))
+
+
+display_names = {
+    "fit_real_real": "Standard PDF fit",
+    "fit_pseudo_replica": "Closure test: Simultaneous fit",
 }
 
 for cfg_key, ax in comparison_map.items():
-    display_name = config[cfg_key]["name"]
-    subset = df_plot[df_plot["config_key"] == cfg_key]
+    display_name = display_names[cfg_key]
+    subset = df_results[df_results["config_key"] == cfg_key]
 
-    # Stack all f_raw_best arrays (shape = (n_replicas, n_grid))
-    all_f_raw = np.vstack(subset["f_raw_best"].values)
-    mean_f = np.mean(all_f_raw, axis=0)
-    std_f = np.std(all_f_raw, axis=0)
+    # Stack replicas
+    all_f = np.vstack(subset["f_raw_best"].values)
+    mean_f = np.mean(all_f, axis=0)
+    std_f = np.std(all_f, axis=0)
 
-    # Compute average sigma for annotation
+    # Metrics
     avg_sigma = np.mean(std_f)
+    chi_vals = subset["chi2_pt"].to_numpy()
+    mean_chi = np.mean(chi_vals)
+    pct_within = 100 * np.sum(np.abs(t3_true - mean_f) <= std_f) / len(t3_true)
 
-    # ±1sigma band
+    # Plot ±1sigma band
     ax.fill_between(
         xgrid,
         mean_f - std_f,
         mean_f + std_f,
         color="C0",
         alpha=0.3,
-        label=rf"$\pm\sigma$ (⟨$\sigma$⟩ = {avg_sigma:.3f})",
+        label=rf"$\pm\sigma={avg_sigma:.3f}$",
     )
-
-    # Mean x·t₃(x)
-    ax.plot(
-        xgrid,
-        mean_f,
-        color="C0",
-        linewidth=2,
-        label=r"Mean $x\,t_{3}(x)$",
-    )
-
-    # Overlay NNPDF40 “truth”
+    # Plot fit mean
+    ax.plot(xgrid, mean_f, color="C0", linewidth=2, label=rf"$\chi^2/{{\rm pt}}={mean_chi:.2f}$")
+    # Plot truth
     ax.plot(
         xgrid,
         t3_true,
         color="k",
         linestyle="--",
         linewidth=1.5,
-        label=r"NNPDF40 (truth)",
-    )
-
-    # Annotate ⟨χ²/pt⟩ ± std(χ²/pt)
-    chi_vals = subset["chi2_pt"].astype(float).to_numpy()
-    mean_chi = np.mean(chi_vals)
-    std_chi = np.std(chi_vals)
-    ax.text(
-        0.95,
-        0.95,
-        rf"$\chi^2/\mathrm{{pt}} = {mean_chi:.2f}\,\pm\,{std_chi:.2f}$",
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-        fontsize=10,
-        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
+        label=rf"Within $1\sigma={pct_within:.1f}\%$",
     )
 
     ax.set_title(display_name, fontsize=14)
@@ -834,296 +796,561 @@ for cfg_key, ax in comparison_map.items():
     ax.grid(alpha=0.2)
     ax.legend(fontsize=10)
 
+plt.tight_layout()
 plt.savefig(image_dir / "realvspseudofit.png", bbox_inches="tight")
 plt.show()
 # %%
-# ---------------------------------------------------------------------
-# 8b) PLOTTING: 2x2 COMPARISON — Pseudo, No-Ansatz (C=0), Ansatz1 (smallest non-zero C),
-# Ansatz2 (smallest non-zero C)
-# ---------------------------------------------------------------------
-fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 10), sharex=True, sharey=True)
+# --- 8b) FINAL PLOTTING: 2x3 GRID WITH METRICS, REFINED TITLES ---
 
-pseudo_map = {
-    "fit_pseudo_replica": axes[0, 0],  # Pure pseudo-data
-    "sens_noansatz_C0": axes[0, 1],  # BSM closure with no ansatz, C=0
-    # (Since we do not have ansatz1/ansatz2 at C=0 in the new config, use the smallest non-zero C
-    # case: C=1e-03)
-    "sens_ansatz1_C1e-03": axes[1, 0],  # Sensitivity Scan 1, C=1e-03
-    "sens_ansatz2_C1e-03": axes[1, 1],  # Sensitivity Scan 2, C=1e-03
-}
 
-for cfg_key, ax in pseudo_map.items():
-    display_name = config[cfg_key]["name"]
-    subset = df_plot[df_plot["config_key"] == cfg_key]
+# Define ansatzes and C_true values
+ansatzes = ["ansatz1", "ansatz2"]
+C_trues = [0.0, 0.1, 1.0]
+color_map = {0.0: "C0", 0.1: "C1", 1.0: "C2"}
+doctitles = {"ansatz1": "Ansatz 1", "ansatz2": "Ansatz 2"}
 
-    # Stack all f_raw_best arrays
-    all_f_raw = np.vstack(subset["f_raw_best"].values)
-    mean_f = np.mean(all_f_raw, axis=0)
-    std_f = np.std(all_f_raw, axis=0)
+# Create 2 rows x 3 cols with minimal spacing
+grid_kw = {"wspace": 0.02, "hspace": 0.02}
+fig, axes = plt.subplots(
+    nrows=2,
+    ncols=3,
+    figsize=(18, 10),
+    sharex=True,
+    sharey=True,
+    gridspec_kw=grid_kw,
+)
 
-    # Compute average sigma for annotation
-    avg_sigma = np.mean(std_f)
+for i, ansatz in enumerate(ansatzes):
+    for j, C_true in enumerate(C_trues):
+        ax = axes[i, j]
+        cfg_key = f"sens_{ansatz}_C{C_true:.0e}"
+        subset = df_results[df_results["config_key"] == cfg_key]
+        if subset.empty:
+            ax.axis("off")
+            continue
 
-    # ±1sigma band
+        # Prepare data
+        all_f = np.vstack(subset["f_raw_best"].values)
+        mean_f = np.mean(all_f, axis=0)
+        std_f = np.std(all_f, axis=0)
+
+        # Metrics
+        avg_sigma = np.mean(std_f)
+        chi_vals = subset["chi2_pt"].to_numpy()
+        mean_chi = np.mean(chi_vals)
+        pct_within = 100 * np.sum(np.abs(t3_true - mean_f) <= std_f) / len(t3_true)
+
+        # Plot uncertainty band
+        ax.fill_between(
+            xgrid,
+            mean_f - std_f,
+            mean_f + std_f,
+            color=color_map[C_true],
+            alpha=0.3,
+            label=rf"$\pm\sigma={avg_sigma:.3f}$",
+        )
+        # Plot fit mean
+        ax.plot(
+            xgrid,
+            mean_f,
+            color=color_map[C_true],
+            linewidth=2,
+            label=rf"$\chi^2/{{\rm pt}}={mean_chi:.2f}$",
+        )
+        # Plot truth with percentage
+        ax.plot(
+            xgrid,
+            t3_true,
+            color="k",
+            linestyle="--",
+            linewidth=1.5,
+            label=rf"Within $1\sigma={pct_within:.1f}\%$",
+        )
+
+        # Column titles = plain values
+        if i == 0:
+            ax.set_title(rf"$C_{{true}}={C_true:g}$", fontsize=14)
+        # Row labels = ansatz
+        if j == 0:
+            ax.set_ylabel(doctitles[ansatz], fontsize=14)
+        # X-axis label on bottom row
+        if i == len(ansatzes) - 1:
+            ax.set_xlabel(r"$x$", fontsize=12)
+
+        ax.grid(alpha=0.2)
+        ax.legend(fontsize=9)
+
+# Overall title, moved up
+global_title = "Closure test: Wilson-coefficient reconstruction"
+plt.suptitle(global_title, y=0.93, fontsize=16)
+plt.tight_layout(rect=[0, 0, 1, 0.89])
+plt.savefig(image_dir / "sensitivity_scan.png", bbox_inches="tight")
+plt.show()
+
+# %%
+# --- 8c) COMPARISON: Fixed-PDF vs BSM joint fit (C_true=0) ---
+
+ansatzes = ["ansatz1", "ansatz2"]
+doctitles = {"ansatz1": "Ansatz 1", "ansatz2": "Ansatz 2"}
+colors = {"Fixed-PDF": "C3", "Simultaneous fit": "C4"}
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 5), sharex=True, sharey=True)
+
+# Precompute Fixed-PDF (C=0) statistics
+subset_nb = df_results[df_results["config_key"] == "fit_pseudo_replica"]
+all_f_nb = np.vstack(subset_nb["f_raw_best"].values)
+mean_nb = np.mean(all_f_nb, axis=0)
+std_nb = np.std(all_f_nb, axis=0)
+avg_sigma_nb = np.mean(std_nb)
+pct_within_nb = 100 * np.sum(np.abs(t3_true - mean_nb) <= std_nb) / len(t3_true)
+
+for ax, ansatz in zip(axes, ansatzes):
+    # Compute BSM joint-fit statistics for C_true=0
+    cfg_bsm = f"sens_{ansatz}_C0e+00"
+    subset_bsm = df_results[df_results["config_key"] == cfg_bsm]
+    all_f_bsm = np.vstack(subset_bsm["f_raw_best"].values)
+    mean_bsm = np.mean(all_f_bsm, axis=0)
+    std_bsm = np.std(all_f_bsm, axis=0)
+    avg_sigma_bsm = np.mean(std_bsm)
+    pct_within_bsm = 100 * np.sum(np.abs(t3_true - mean_bsm) <= std_bsm) / len(t3_true)
+
+    # Plot Fixed-PDF ±1sigma band and mean
     ax.fill_between(
         xgrid,
-        mean_f - std_f,
-        mean_f + std_f,
-        color="C0",
+        mean_nb - std_nb,
+        mean_nb + std_nb,
+        color=colors["Fixed-PDF"],
         alpha=0.3,
-        label=rf"$\pm\sigma$ (⟨$\sigma$⟩ = {avg_sigma:.3f})",
     )
-
-    # Mean x·t₃(x)
     ax.plot(
         xgrid,
-        mean_f,
-        color="C0",
+        mean_nb,
+        color=colors["Fixed-PDF"],
         linewidth=2,
-        label=r"Mean $x\,t_{3}(x)$",
+        label=rf"Fixed-PDF: $\pm\sigma={avg_sigma_nb:.4f}$, {pct_within_nb:.1f}",
     )
 
-    # Overlay NNPDF40 “truth”
+    # Plot BSM ±1sigma band and mean
+    ax.fill_between(
+        xgrid,
+        mean_bsm - std_bsm,
+        mean_bsm + std_bsm,
+        color=colors["Simultaneous fit"],
+        alpha=0.3,
+    )
+    ax.plot(
+        xgrid,
+        mean_bsm,
+        color=colors["Simultaneous fit"],
+        linewidth=2,
+        label=rf"Simultaneous fit: $\pm\sigma={avg_sigma_bsm:.4f}$, {pct_within_bsm:.1f}",
+    )
+
+    # Plot true t3(x)
     ax.plot(
         xgrid,
         t3_true,
         color="k",
         linestyle="--",
         linewidth=1.5,
-        label=r"NNPDF40 (truth)",
+        label=r"True $t_3(x)$",
     )
 
-    # Annotate ⟨χ²/pt⟩ ± std(χ²/pt)
-    chi_vals = subset["chi2_pt"].astype(float).to_numpy()
-    mean_chi = np.mean(chi_vals)
-    std_chi = np.std(chi_vals)
-    ax.text(
-        0.95,
-        0.95,
-        rf"$\chi^2/\mathrm{{pt}} = {mean_chi:.2f}\,\pm\,{std_chi:.2f}$",
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-        fontsize=10,
-        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
-    )
-
-    ax.set_title(display_name, fontsize=14)
+    # Styling
+    ax.set_title(doctitles[ansatz], fontsize=14)
     ax.set_xlabel(r"$x$", fontsize=12)
-    ax.set_ylabel(r"$x\,t_{3}(x)$", fontsize=12)
     ax.grid(alpha=0.2)
-    ax.legend(fontsize=10)
+    if ansatz == "ansatz1":
+        ax.set_ylabel(r"$x\,t_{3}(x)$", fontsize=12)
+    ax.legend(fontsize=9)
 
-plt.savefig(image_dir / "sensitivity_scan.png", bbox_inches="tight")
+plt.suptitle(
+    "Comparison of $t_3(x)$: Fixed-PDF analysis vs Simultaneous fit ($C_{\\rm true}=0$)",
+    fontsize=16,
+    y=0.98,
+)
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.savefig(image_dir / "comparison_nonbsm_vs_bsm.png", bbox_inches="tight")
 plt.show()
+
+
 # %%
 # ---------------------------------------------------------------------
-# 9) PLOTTING: alpha vs. beta SCATTER SPLIT INTO TWO SUBPLOTS
-#               LEFT = real, pseudo, no-ansatz (all C_true = 0)
-#               RIGHT = ansatz1 & ansatz2 (marker = ansatz, color = C_true, discrete legend)
-#               Both subplots share x- and y-axes for direct comparison
+# 9) PLOTTING: alpha vs. beta — SINGLE PLOT WITH UNCERTAINTY ELLIPSES
 # ---------------------------------------------------------------------
 
 
-fig, (ax_left, ax_right) = plt.subplots(ncols=2, figsize=(14, 6), sharex=True, sharey=True)
+# Helper to plot a 1sigma confidence ellipse
+def plot_confidence_ellipse(ax, data, n_std=1.0, **kwargs):  # noqa: ANN001, ANN003, ANN201
+    """Plot an n_std confidence ellipse of `data` (2xN array) on `ax`.
 
-# -----------------------
-# LEFT SUBPLOT (C_true = 0)
-# -----------------------
+    Returns the ellipse center (mean_x, mean_y).
+    """
+    x, y = data
+    mean_x, mean_y = np.mean(x), np.mean(y)
+    cov = np.cov(x, y)
+    vals, vecs = np.linalg.eigh(cov)
+    order = vals.argsort()[::-1]
+    vals, vecs = vals[order], vecs[:, order]
+    theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+    width, height = 2 * n_std * np.sqrt(vals)
+    ellipse = Ellipse((mean_x, mean_y), width, height, angle=theta, **kwargs)
+    ax.add_patch(ellipse)
+    return mean_x, mean_y
+
+
+# Single axes
+fig, ax = plt.subplots(figsize=(8, 6))
+
+# 1) No BSM fits: plot ellipses without legend, crosses with legend
 left_configs = {
     "fit_real_real": "Real-Data Fit",
     "fit_pseudo_replica": "Pseudo-Replica Fit",
-    "sens_noansatz": "BSM Closure (No Ansatz)",
 }
-# assign one distinct color per config_key prefix (using C3, C4, C5 so they differ from right
-# subplot)
-color_map_left = {
-    "fit_real_real": "C3",
-    "fit_pseudo_replica": "C4",
-    "sens_noansatz": "C5",
-}
-
+color_map_left = {"fit_real_real": "C3", "fit_pseudo_replica": "C4"}
 for prefix, label in left_configs.items():
-    subset = df_plot[df_plot["config_key"].str.startswith(prefix)]
+    subset = df_results[df_results["config_key"].str.startswith(prefix)]
     if subset.empty:
         continue
-
-    alphas = subset["alpha"].astype(float).to_numpy()
-    betas = subset["beta"].astype(float).to_numpy()
-
-    ax_left.scatter(
-        alphas,
-        betas,
-        marker="o",
-        color=color_map_left[prefix],
-        edgecolor="k",
-        alpha=0.8,
-        label=label,
-        linewidth=0.5,
-        s=50,
+    alphas = subset["alpha"].to_numpy()
+    betas = subset["beta"].to_numpy()
+    # ellipse, no label
+    mx, my = plot_confidence_ellipse(
+        ax,
+        (alphas, betas),
+        edgecolor=color_map_left[prefix],
+        facecolor="none",
+        linewidth=2,
+        label=None,
     )
+    # mark mean with cross, labeled
+    ax.scatter(mx, my, marker="x", color=color_map_left[prefix], s=50, label=label)
 
-ax_left.set_xlabel(r"$\alpha$", fontsize=12)
-ax_left.set_ylabel(r"$\beta$", fontsize=12)
-ax_left.set_title("No BSM (all $C_{true}=0$)", fontsize=14)
-ax_left.grid(alpha=0.2)
-ax_left.legend(title="Configuration", loc="upper left")
-
-# ------------------------
-# RIGHT SUBPLOT (BSM Scan)
-# ------------------------
-C_trues = [0.001, 0.1, 1.0]
-# Assign one discrete color per C_true (using C0, C1, C2)
-color_map = {
-    0.001: "C0",
-    0.1: "C1",
-    1.0: "C2",
-}
-# Marker by ansatz
-marker_map_ansatz = {
-    "ansatz1": "s",  # square
-    "ansatz2": "o",  # circle
-}
-
-# Plot each (ansatz, C_true) combination, but only label C_true once (when ansatz1)
-for ansatz_name, mkr in marker_map_ansatz.items():
-    for C_true in C_trues:
-        cfg_key = f"sens_{ansatz_name}_C{C_true:.0e}"
-        subset = df_plot[df_plot["config_key"] == cfg_key]
+# 2) BSM sensitivity scans: ellipses colored by C_true, markers by ansatz
+marker_map = {"ansatz1": "s", "ansatz2": "o"}
+for ansatz in ansatzes:
+    for C in C_trues:
+        cfg_key = f"sens_{ansatz}_C{C:.0e}"
+        subset = df_results[df_results["config_key"] == cfg_key]
         if subset.empty:
             continue
-
-        alphas = subset["alpha"].astype(float).to_numpy()
-        betas = subset["beta"].astype(float).to_numpy()
-
-        # Only give a label for C_true on the ansatz1 pass so that each C_true appears once in the
-        # legend
-        label_ct = (f"$C_{{true}}$={C_true:.0e}") if ansatz_name == "ansatz1" else None
-
-        ax_right.scatter(
-            alphas,
-            betas,
-            marker=mkr,
-            color=color_map[C_true],
+        alphas = subset["alpha"].to_numpy()
+        betas = subset["beta"].to_numpy()
+        # ellipse, no label
+        mx, my = plot_confidence_ellipse(
+            ax,
+            (alphas, betas),
+            edgecolor=color_map[C],
+            facecolor="none",
+            linewidth=2,
+            label=None,
+        )
+        # mean marker, no label
+        ax.scatter(
+            mx,
+            my,
+            marker=marker_map[ansatz],
+            color=color_map[C],
             edgecolor="k",
-            alpha=0.8,
-            label=label_ct,
-            linewidth=0.5,
-            s=50,
+            s=60,
+            label=None,
         )
 
-ax_right.set_xlabel(r"$\alpha$", fontsize=12)
-ax_right.set_title("BSM Sensitivity Scans", fontsize=14)
-ax_right.grid(alpha=0.2)
-
-# Create a separate legend for the marker-shape ⇒ ansatz mapping
+# Build combined legend under the plot
+# 1) configuration (crosses)
+config_handles = []
+for prefix, label in left_configs.items():
+    config_handles.append(
+        Line2D(
+            [0],
+            [0],
+            marker="x",
+            color=color_map_left[prefix],
+            linestyle="None",
+            markersize=8,
+            label=label,
+        ),
+    )
+# 2) ansatz markers
 ansatz_handles = [
-    Line2D([0], [0], marker="s", color="gray", linestyle="", label="Ansatz 1", markeredgecolor="k"),
-    Line2D([0], [0], marker="o", color="gray", linestyle="", label="Ansatz 2", markeredgecolor="k"),
+    Line2D(
+        [0],
+        [0],
+        marker=marker_map[a],
+        color="gray",
+        linestyle="None",
+        markeredgecolor="k",
+        markersize=8,
+        label=f"Ansatz {a[-1]}",
+    )
+    for a in ansatzes
 ]
-legend1 = ax_right.legend(handles=ansatz_handles, title="Ansatz", loc="upper left")
-ax_right.add_artist(legend1)
+# 3) C_true colors
+ct_handles = [Line2D([0], [0], color=color_map[C], lw=4, label=f"{C:g}") for C in C_trues]
 
-# Create a second legend for C_true ⇒ color mapping
-ax_right.legend(title="$C_{true}$", loc="lower left")
+# Combine and place legend
+all_handles = config_handles + ansatz_handles + ct_handles
+all_labels = [h.get_label() for h in all_handles]
+fig.legend(
+    handles=all_handles,
+    labels=all_labels,
+    ncol=len(all_handles),
+    loc="lower center",
+    bbox_to_anchor=(0.5, -0.1),
+    fontsize=9,
+    frameon=False,
+)
 
+ax.set_xlabel(r"$\alpha$", fontsize=12)
+ax.set_ylabel(r"$\beta$", fontsize=12)
+ax.set_title("Alpha vs. Beta: Uncertainty Ellipses", fontsize=14)
+ax.grid(alpha=0.2)
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.savefig(image_dir / "alpha_beta_comp.png", bbox_inches="tight")
 plt.show()
 
+# %%
+# ---------------------------------------------------------------------
+# 9b) PLOTTING: alpha & beta distributions by ansatz and C_true (updated)
+# ---------------------------------------------------------------------
+
+# 2 rows x 2 cols: rows=parameters (alpha, beta), cols=ansatzes
+grid_kw = {"wspace": 0, "hspace": 0.3}
+fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12, 8), sharey=True, gridspec_kw=grid_kw)
+
+for j, ansatz in enumerate(ansatzes):
+    axes[0, j].set_title(doctitles[ansatz], fontsize=14)
+    for i, param in enumerate(["alpha", "beta"]):
+        ax = axes[i, j]
+        for C in C_trues:
+            cfg = f"sens_{ansatz}_C{C:.0e}"
+            df_sub = df_results[df_results["config_key"] == cfg]
+            if df_sub.empty:
+                continue
+            vals = df_sub[param].to_numpy()
+            mean_val = vals.mean()
+            std_val = vals.std()
+            # histogram
+            ax.hist(vals, bins=20, density=True, alpha=0.3, color=color_map[C])
+            # vertical mean line
+            ax.axvline(
+                mean_val,
+                color=color_map[C],
+                linestyle="--",
+                linewidth=2,
+                label=rf"$\mu={mean_val:.3f},\ \sigma={std_val:.3f}$",
+            )
+        # labels
+        ax.set_xlabel(r"$\alpha$" if param == "alpha" else r"$\beta$", fontsize=12)
+        if j == 0:
+            ax.set_ylabel("Density", fontsize=12)
+        ax.grid(alpha=0.2)
+        ax.legend(fontsize=9)
+
+# Create global legend for C_true colours
+ct_handles = [
+    Line2D([0], [0], color=color_map[C], lw=4, label=f"$C_{{\\rm true}}={C:g}$") for C in C_trues
+]
+fig.legend(
+    handles=ct_handles,
+    ncol=len(C_trues),
+    loc="lower center",
+    bbox_to_anchor=(0.5, -0.02),
+    fontsize=10,
+    frameon=False,
+)
+
+# Adjust layout to make room for the legend at the bottom
+plt.savefig(image_dir / "alpha_beta_histograms_with_ct_legend.png", bbox_inches="tight")
+plt.show()
 
 # %%
-# --- 10) PLOTTING: Raw C_fit Histograms with Mean, Std, and C_true Lines ---
+# --- 10) PLOTTING: Raw C_fit Histograms (touching panels) ---
 fig, axes = plt.subplots(
     nrows=1,
     ncols=len(C_trues),
     figsize=(4 * len(C_trues), 4),
     sharex=True,
     sharey=True,
+    gridspec_kw={"wspace": 0},  # no gap between panels
 )
 
-# Define colors for each ansatz
-ansatz_colors = {
-    "ansatz1": "C0",
-    "ansatz2": "C1",
-}
+# Use default Matplotlib blue for ansatz2, keep orange for ansatz1
+ansatz_colors = {"ansatz1": "orange", "ansatz2": "C0"}
 
 for col_idx, C_true_val in enumerate(C_trues):
     ax = axes[col_idx]
-    stats_texts = []
-    for ansatz_name in ["ansatz1", "ansatz2"]:
-        cfg_key = f"sens_{ansatz_name}_C{C_true_val:.0e}"
-        subset = df_plot[df_plot["config_key"] == cfg_key]
-        if subset.empty:
+
+    for i, ansatz_name in enumerate(["ansatz1", "ansatz2"]):
+        cfg = f"sens_{ansatz_name}_C{C_true_val:.0e}"
+        df_sub = df_results[df_results["config_key"] == cfg]
+        if df_sub.empty:
             continue
 
-        C_vals = subset["C_fit"].to_numpy()
-        mean_i = C_vals.mean()
-        std_i = C_vals.std()
+        vals = df_sub["C_fit"].to_numpy()
+        mu, sigma = vals.mean(), vals.std()
 
-        # Plot histogram of raw C_fit
+        # filled histogram
         ax.hist(
-            C_vals,
+            vals,
             bins=30,
             histtype="stepfilled",
             alpha=0.5,
             density=True,
             color=ansatz_colors[ansatz_name],
         )
-
-        # Draw vertical dashed line at the mean
+        # dashed mean line, colour-matched per ansatz
         ax.axvline(
-            mean_i,
+            mu,
             color=ansatz_colors[ansatz_name],
             linestyle="--",
-            linewidth=1.0,
+            linewidth=1.5,
         )
 
-        # Prepare annotation text for this ansatz using LaTeX for mu and sigma
-        stats_texts.append(
-            f"{ansatz_name.capitalize()}: $\\mu={mean_i:.3f}$, $\\sigma={std_i:.3f}$",
+        # coloured mu/sigma text
+        ax.text(
+            0.95,
+            0.95 - i * 0.07,
+            rf"$\mu={mu:.3f},\ \sigma={sigma:.3f}$",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            color=ansatz_colors[ansatz_name],
+            fontsize=9,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
         )
 
-    # Draw vertical solid line at the injected C_true
-    ax.axvline(
-        C_true_val,
-        color="k",
-        linestyle="-",
-        linewidth=1.0,
-    )
+    # true-value line remains black
+    ax.axvline(C_true_val, color="k", linestyle="-", lw=1)
 
-    ax.set_title(f"$C_{{true}} = {C_true_val:.0e}$", fontsize=12)
+    ax.set_title(rf"$C_{{\rm true}} = {C_true_val:g}$", fontsize=12)
     ax.set_xlabel(r"$C_{\rm fit}$", fontsize=12)
     if col_idx == 0:
         ax.set_ylabel("Density", fontsize=12)
     ax.grid(alpha=0.2)
 
-    # Place mean and std annotation in upper right corner
-    ax.text(
-        0.95,
-        0.95,
-        "\n".join(stats_texts),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-        fontsize=9,
-        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
-    )
-
-
+# global legend: ansatz colours + black line for true C
 legend_handles = [
     Line2D([0], [0], color=ansatz_colors["ansatz1"], lw=4, label="Ansatz 1"),
     Line2D([0], [0], color=ansatz_colors["ansatz2"], lw=4, label="Ansatz 2"),
+    Line2D([0], [0], color="k", lw=1, label="True $C$"),
 ]
 fig.legend(
     handles=legend_handles,
-    title="Ansatz",
-    loc="upper center",
-    ncol=2,
-    bbox_to_anchor=(0.5, 1.05),
+    loc="lower center",
+    ncol=3,
+    bbox_to_anchor=(0.5, -0.01),
+    frameon=False,
+    fontsize=10,
 )
 
-plt.suptitle("Raw $C_{\\rm fit}$ Distributions with Mean, Std, and True Value", y=1.10, fontsize=14)
+plt.suptitle(
+    "$C_{\\rm fit}$ Distributions",
+    y=1,
+    fontsize=14,
+)
+
+plt.tight_layout(rect=[0, 0.05, 1, 1])
 plt.savefig(image_dir / "histograms.png", bbox_inches="tight")
+plt.show()
+
+# %%
+# Plot 11 C-distribution, PDF-fixed vs. Joint-fit for both ansatz1 and ansatz2
+
+
+# --- build fixed-PDF ensemble from fit_pseudo_replica ---
+f_list = df_results.loc[df_results["config_key"] == "fit_pseudo_replica", "f_raw_best"].to_numpy()
+f_stack = np.vstack([arr.cpu().numpy() if hasattr(arr, "cpu") else arr for arr in f_list])
+f_fixed = f_stack.mean(axis=0)
+
+# --- ansatz vectors ---
+K1_raw = (q2_vals - q2_vals.min()) ** 2
+K1 = K1_raw / np.max(np.abs(K1_raw))
+
+K2_raw = x_vals_data * (1.0 - x_vals_data) * (q2_vals - q2_vals.min())
+K2 = K2_raw / np.max(np.abs(K2_raw))
+
+# --- precompute A and B ---
+A = W.dot(f_fixed)
+B1 = A * K1
+B2 = A * K2
+
+Cinv = np.linalg.inv(c_yy)
+n_replicas = 100
+
+# --- analytic fit of C for each replica ---
+C_fixed1, C_fixed2 = [], []
+for replica in range(n_replicas):
+    rng = np.random.default_rng(seed=replica * 451)
+    y_i = rng.multivariate_normal(y_theory, c_yy)
+    num1 = B1.dot(Cinv.dot(y_i - A))
+    den1 = B1.dot(Cinv.dot(B1))
+    C_fixed1.append(num1 / den1)
+    num2 = B2.dot(Cinv.dot(y_i - A))
+    den2 = B2.dot(Cinv.dot(B2))
+    C_fixed2.append(num2 / den2)
+
+C_fixed1 = np.array(C_fixed1)
+C_fixed2 = np.array(C_fixed2)
+
+# --- extract joint-fit C from network runs ---
+C_joint1 = df_results.loc[df_results["config_key"] == "sens_ansatz1_C0e+00", "C_fit"].to_numpy()
+C_joint2 = df_results.loc[df_results["config_key"] == "sens_ansatz2_C0e+00", "C_fit"].to_numpy()
+
+# --- plotting distributions ---
+fig, axes = plt.subplots(ncols=2, figsize=(12, 5), sharey=True, gridspec_kw={"wspace": 0})
+fig.subplots_adjust(bottom=0.2)
+
+for ax, C_fixed, C_joint, title in zip(
+    axes,
+    [C_fixed1, C_fixed2],
+    [C_joint1, C_joint2],
+    ["Ansatz 1", "Ansatz 2"],
+):
+    # common bins
+    all_C = np.concatenate([C_fixed, C_joint])  # noqa: N816
+    bins = np.linspace(all_C.min(), all_C.max(), 30)
+    # histograms
+    h1 = ax.hist(C_fixed, bins=bins, density=True, alpha=0.6, color="C0")
+    h2 = ax.hist(C_joint, bins=bins, density=True, alpha=0.6, color="C1")
+    # mean and sigma
+    mu_fixed, sigma_fixed = np.mean(C_fixed), np.std(C_fixed)
+    mu_joint, sigma_joint = np.mean(C_joint), np.std(C_joint)
+    ax.axvline(
+        mu_fixed,
+        linestyle="--",
+        color="red",
+        label=rf"$\mu_{{fix}}={mu_fixed:.3f}\pm{sigma_fixed:.3f}$",
+    )
+    ax.axvline(
+        mu_joint,
+        linestyle="--",
+        color="blue",
+        label=rf"$\mu_{{simu}}={mu_joint:.3f}\pm{sigma_joint:.3f}$",
+    )
+    # true value
+    ax.axvline(0, linestyle=":", color="black", label=r"$C_{true}=0$")
+    ax.set_xlabel(r"$C_{\mathrm{fit}}$")
+    ax.set_title(title)
+    ax.grid(alpha=0.2)
+    ax.legend(loc="upper right")
+
+# global legend for histogram colors
+legend_elements = [
+    Patch(facecolor="C0", alpha=0.6, label="Fixed-PDF"),
+    Patch(facecolor="C1", alpha=0.6, label="Simultaneous-Fit"),
+]
+fig.legend(handles=legend_elements, loc="lower center", ncol=2)
+
+axes[0].set_ylabel("Density")
+fig.suptitle(
+    "Distribution of fitted Wilson coefficient (closure test, "
+    "$C_{\\rm true}=0$): Fixed-PDF analysis vs Simultaneous fit",
+    y=0.97,
+)
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.savefig(image_dir / "moneyplot2_C_distribution_fixed.png", bbox_inches="tight")
 plt.show()
 
 # %%
