@@ -973,6 +973,156 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.savefig(image_dir / "comparison_nonbsm_vs_bsm.png", bbox_inches="tight")
 plt.show()
 
+# %%
+# --- 8d) HISTOGRAMS: distribution of sigma_i(x) for each fit ---
+
+sigma_fixed_pdf = std_nb
+
+sigma_joint_ansatz1 = np.std(
+    np.vstack(df_results[df_results["config_key"] == "sens_ansatz1_C0e+00"]["f_raw_best"].values),
+    axis=0,
+)
+sigma_joint_ansatz2 = np.std(
+    np.vstack(df_results[df_results["config_key"] == "sens_ansatz2_C0e+00"]["f_raw_best"].values),
+    axis=0,
+)
+
+# 2) Compute their means
+mean_sigma_fixed_pdf = np.mean(sigma_fixed_pdf)
+mean_sigma_joint_ansatz1 = np.mean(sigma_joint_ansatz1)
+mean_sigma_joint_ansatz2 = np.mean(sigma_joint_ansatz2)
+
+# 3) Create shared bins across all three
+all_sigmas = np.concatenate([sigma_fixed_pdf, sigma_joint_ansatz1, sigma_joint_ansatz2])
+number_of_bins = 30
+shared_bins = np.linspace(all_sigmas.min(), all_sigmas.max(), number_of_bins + 1)
+
+# 4) Plot overlapping histograms
+plt.figure(figsize=(8, 6))
+
+plt.hist(
+    sigma_fixed_pdf,
+    bins=shared_bins,
+    density=True,
+    alpha=0.4,
+    label=rf"Fixed-PDF: $\langle\sigma\rangle = {mean_sigma_fixed_pdf:.4f}$",
+    color="C3",
+)
+plt.hist(
+    sigma_joint_ansatz1,
+    bins=shared_bins,
+    density=True,
+    alpha=0.4,
+    label=rf"Joint fit (Ansatz 1): $\langle\sigma\rangle = {mean_sigma_joint_ansatz1:.4f}$",
+    color="C4",
+)
+plt.hist(
+    sigma_joint_ansatz2,
+    bins=shared_bins,
+    density=True,
+    alpha=0.4,
+    label=rf"Joint fit (Ansatz 2): $\langle\sigma\rangle = {mean_sigma_joint_ansatz2:.4f}$",
+    color="C5",
+)
+
+# 5) Vertical dashed lines at the means
+for mean_value, color in zip(
+    [mean_sigma_fixed_pdf, mean_sigma_joint_ansatz1, mean_sigma_joint_ansatz2],
+    ["C3", "C4", "C5"],
+):
+    plt.axvline(
+        x=mean_value,
+        linestyle="--",
+        linewidth=2,
+        color=color,
+    )
+
+# 6) Labels, title, legend, grid
+plt.xlabel(r"$\sigma_i = \mathrm{StdDev}\bigl[t_3(x_i)\bigr]$", fontsize=12)
+plt.ylabel(r"Probability density", fontsize=12)
+plt.title(
+    r"Histogram of pointwise standard deviations $\sigma_i$ for each fit",
+    fontsize=14,
+)
+plt.legend(fontsize=10)
+plt.grid(alpha=0.2)
+plt.tight_layout()
+plt.show()
+
+# %%
+# --- 8e) χ²/pt distributions with proper LaTeX and valid-region percentages ---
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Extract unfiltered χ²/pt arrays
+chi_fixed = df_raw.loc[df_raw["config_key"] == "fit_pseudo_replica", "chi2_pt"].to_numpy()
+chi_sens1 = df_raw.loc[df_raw["config_key"] == "sens_ansatz1_C0e+00", "chi2_pt"].to_numpy()
+chi_sens2 = df_raw.loc[df_raw["config_key"] == "sens_ansatz2_C0e+00", "chi2_pt"].to_numpy()
+
+# Define valid χ²/pt interval
+lower, upper = 0.9, 1.1
+
+
+# Compute mean, std, and percentage valid in [0.9, 1.1]
+def stats_and_percent(arr, low, high):
+    mu = arr.mean()
+    sigma = arr.std()
+    pct = 100 * np.mean((arr >= low) & (arr <= high))
+    return mu, sigma, pct
+
+
+m_fixed, s_fixed, p_fixed = stats_and_percent(chi_fixed, lower, upper)
+m_s1, s_s1, p_s1 = stats_and_percent(chi_sens1, lower, upper)
+m_s2, s_s2, p_s2 = stats_and_percent(chi_sens2, lower, upper)
+
+# Shared bins
+all_chi = np.concatenate([chi_fixed, chi_sens1, chi_sens2])
+bins = np.linspace(all_chi.min(), all_chi.max(), 30)
+
+plt.figure(figsize=(8, 6))
+
+# Histograms
+plt.hist(
+    chi_fixed,
+    bins=bins,
+    alpha=0.5,
+    color="C0",
+    label=rf"Fixed-PDF: $\mu={m_fixed:.2f},\ \sigma={s_fixed:.2f},\ {p_fixed:.1f}\%\ \mathrm{{valid}}$",
+)
+plt.hist(
+    chi_sens1,
+    bins=bins,
+    alpha=0.5,
+    color="C1",
+    label=rf"Sens.\ ansatz1: $\mu={m_s1:.2f},\ \sigma={s_s1:.2f},\ {p_s1:.1f}\%\ \mathrm{{valid}}$",
+)
+plt.hist(
+    chi_sens2,
+    bins=bins,
+    alpha=0.5,
+    color="C2",
+    label=rf"Sens.\ ansatz2: $\mu={m_s2:.2f},\ \sigma={s_s2:.2f},\ {p_s2:.1f}\%\ \mathrm{{valid}}$",
+)
+
+# Vertical lines at valid-region bounds
+plt.axvline(lower, color="k", linestyle="--")
+plt.axvline(upper, color="k", linestyle="--")
+
+# Vertical lines at means
+plt.axvline(m_fixed, color="C0", linestyle="-", linewidth=1.5)
+plt.axvline(m_s1, color="C1", linestyle="-", linewidth=1.5)
+plt.axvline(m_s2, color="C2", linestyle="-", linewidth=1.5)
+
+# Labels and title
+plt.xlabel(r"$\chi^2/\mathrm{pt}$", fontsize=12)
+plt.ylabel("Count", fontsize=12)
+plt.title(r"$\chi^2/\mathrm{pt}$ Distributions and Valid-Region Fractions", fontsize=14)
+
+plt.legend(fontsize=9)
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
 
 # %%
 # ---------------------------------------------------------------------
