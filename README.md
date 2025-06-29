@@ -1,80 +1,162 @@
-<div align="center">
-  <img src="doc/sphinx/source/_static/LogoNNPDF.png" height=100>
-</div>
+<p align="center">
+  <img src="logo.png" alt="T3Net Logo" width="200"/>
+</p>
 
-[![NNPDF test suite](https://github.com/NNPDF/nnpdf/actions/workflows/all_tests_nnpdf.yml/badge.svg)](https://github.com/NNPDF/nnpdf/actions/workflows/all_tests_nnpdf.yml)
-[![Docs](https://github.com/NNPDF/nnpdf/actions/workflows/upload_docs.yml/badge.svg)](https://github.com/NNPDF/nnpdf/actions/workflows/upload_docs.yml)
-[![Commondata](https://github.com/NNPDF/nnpdf/actions/workflows/check_newcd.yml/badge.svg)](https://github.com/NNPDF/nnpdf/actions/workflows/check_newcd.yml)
+# t3_BSM_Comparison
 
-[![DOI](https://zenodo.org/badge/118135201.svg)](https://zenodo.org/badge/latestdoi/118135201)
+This repository contains code for performing a closure test and BSM Wilson‐coefficient reconstruction in the non‐singlet PDF channel t3(x). The main entry point is the T3_beta.py script, which:
 
-# NNPDF: An open-source machine learning framework for global analyses of parton distributions
+1. Loads and preprocesses BCDMS F2^p and F2^d data via the validphys API  
+2. Builds FK tables and covariance matrices  
+3. Constructs pseudo‐data for closure tests  
+4. Defines and trains neural‐network models (with and without a single BSM parameter C)  
+5. Produces plots comparing data vs. theory, uncertainty bands, sensitivity scans, and fitted Wilson‐coefficient distributions  
 
-[The NNPDF collaboration](http://nnpdf.science) determines the structure of the
-proton using Machine Learning methods. This is the main repository of the
-fitting and analysis frameworks. In particular it contains all the necessary
-tools to [reproduce](https://docs.nnpdf.science/tutorials/reproduce.html) the
-[NNPDF4.0 PDF determinations](https://arxiv.org/abs/2109.02653).
+---
 
-## Documentation
+## Requirements
 
-The documentation is available at <https://docs.nnpdf.science/>
+- Conda (>= 25) or Python 3.9+ with venv  
+- At least 4 GB free disk space to download data/theory ingredients  
+- (Optional) A GPU and CUDA drivers for faster PyTorch training  
 
-## Install
+---
 
-See the [NNPDF installation guide](https://docs.nnpdf.science/get-started/installation.html)
-for instructions on how to install and use the code,
-using either [conda](https://docs.nnpdf.science/get-started/installation.html#installation-using-conda) or [pip](https://docs.nnpdf.science/get-started/installation.html#installation-using-pip),
-requirements and [dependencies](https://docs.nnpdf.science/get-started/installation.html#dependencies-and-requirements)
-As a first step we recommend to follow one of the [tutorials](https://docs.nnpdf.science/tutorials/run-fit.html).
+## 1. Clone & initialize
 
-While we aim to keep the tip of the master branch always stable, tested and correct,
-runs of the code intended for publication should use one the [released](https://github.com/NNPDF/nnpdf/releases) versions.
+git clone https://github.com/yourusername/yourrepo.git  
+cd yourrepo  
 
+---
 
-## Cite
+## 2a. Install with Conda
 
-This code is described in the following [paper](https://inspirehep.net/literature?sort=mostrecent&size=25&page=1&q=find%20eprint%202109.02671):
+(Optional) Freeze your current setup:  
+pip freeze > requirements.txt  
 
-```
-@article{NNPDF:2021uiq,
-    author = "Ball, Richard D. and others",
-    collaboration = "NNPDF",
-    title = "{An open-source machine learning framework for global analyses of parton distributions}",
-    eprint = "2109.02671",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    reportNumber = "Edinburgh 2021/13, Nikhef-2021-020, TIF-UNIMI-2021-12",
-    doi = "10.1140/epjc/s10052-021-09747-9",
-    journal = "Eur. Phys. J. C",
-    volume = "81",
-    number = "10",
-    pages = "958",
-    year = "2021"
-}
-```
+Create environment.yml alongside requirements.txt:
 
-If you use the code to produce new results in a scientific publication,
-we ask you to please cite this paper, the [zenodo entry](https://doi.org/10.5281/zenodo.5362228) and 
-follow the [Citation Policy](https://docs.nnpdf.science/get-started/cite.html).
+name: environment_nnpdf_full  
+channels:  
+  - conda-forge  
+dependencies:  
+  - python=3.11  
+  - nnpdf=4.0.10  
+  - pip  
+  - pip:  
+    - -r requirements.txt  
 
-## Contribute
+Create & activate the environment:  
+conda env create -f environment.yml  
+conda activate environment_nnpdf_full  
 
-We welcome bug reports or feature requests sent to the [issue
-tracker](https://github.com/NNPDF/nnpdf/issues). You may use the issue tracker
-for help and questions as well.
+---
 
-If you would like contribute to the code, please follow the [Contribution
-Guidelines](https://docs.nnpdf.science/contributing/index.html).
+## 2b. Install with pip + venv
 
-When developing locally you can test your changes with pytest, running from the root of the repository:
+python3 -m venv .env_nnpdf  
+source .env_nnpdf/bin/activate  
+pip install --upgrade pip  
+pip install \  
+  git+https://github.com/NNPDF/nnpdf.git@4.0.10 \  
+  -r requirements.txt  
+# Then manually install non-Python deps (LHAPDF, pandoc) as needed  
 
-```
-  pytest --mpl --pyargs n3fit validphys
-```
+---
 
-## License
+## 3. Running the script
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 as published by the Free Software Foundation.
+Once your environment is ready:
 
-© Copyright 2021-2025, the NNPDF collaboration
+python T3_beta.py
+
+This will:  
+- Create model_states/ and results/ directories  
+- Fetch & preprocess BCDMS data  
+- Build FK tables and covariance matrices  
+- Train neural nets for each replica and configuration  
+- Save training results to training_results.pkl  
+- Generate plots in images/  
+
+---
+
+## 4. Key files
+
+- T3_beta.py – The main workflow script  
+- environment.yml & requirements.txt – Reproducible environment specification  
+- training_results.pkl – Pickled DataFrame of fit results  
+- images/ – All generated plots  
+
+---
+
+## Downloading resources (theoryID 208 and others)
+
+validphys can automatically download required resources — PDF sets, completed fits, theory definitions, and past validphys outputs — when you run code that needs them. By default it checks your local cache (configured in nnprofile) and if missing, fetches from the remote server.
+
+Example validphys runcard snippet:
+
+    pdf: NNPDF40_nnlo_as_01180  
+    fit: NNPDF40_nlo_as_01180  
+    theoryid: 208  
+    use_cuts: "fromfit"  
+    dataset_input:  
+      dataset: ATLAS_DY_7TEV_36PB_ETA  
+      cfac: [EWK]  
+    actions_:  
+      - plot_fancy  
+      - plot_chi2dist  
+
+When you execute validphys (or vp-setupfit), it will ensure the PDF set NNPDF40_nnlo_as_01180, the fit NNPDF40_nlo_as_01180, and the theory with ID 208 are present. If not found locally, they are downloaded and installed automatically. You rarely need manual intervention.
+
+To disable auto-download, pass `--no-net` to validphys tools. To force-enable, use `--net`.
+
+### What can be downloaded
+
+- **Fits** (via `vp-get fit <name>`)  
+- **PDF sets** (from NNPDF or LHAPDF); fits imply their PDF sets  
+- **Theories** (by theoryID, e.g. 208)  
+- **validphys output files** stored in the server cache  
+
+### The `vp-get` tool
+
+Use `vp-get` to fetch resources manually:
+
+    vp-get --list
+    # shows available resource types: fit, pdf, theoryID, vp_output_file
+
+    vp-get fit NNPDF31_nlo_as_0118_1000
+
+If already installed, it reports the local path.
+
+### Programmatic downloads via Loader
+
+In Python, use the FallbackLoader to auto-download:
+
+    from validphys.loader import FallbackLoader as Loader
+    l = Loader()
+    # downloads theory 208 if missing
+    l.check_theoryID(208)
+
+The standard Loader only searches locally and will error if the resource isn’t present.
+
+---
+
+## NNPDF-specific information
+
+Installing NNPDF requires:
+
+- A recent Python (3.9+), Linux or macOS  
+- ≥ 4 GB storage  
+
+Conda install (includes LHAPDF & pandoc):
+
+    conda create -n environment_nnpdf nnpdf -c conda-forge
+    conda activate environment_nnpdf
+
+Pip install (manual LHAPDF & pandoc):
+
+    python -m venv environment_nnpdf
+    source environment_nnpdf/bin/activate
+    python -m pip install git+https://github.com/NNPDF/nnpdf.git@4.0.10
+
+Shared data resides under `${CONDA_PREFIX}/share/NNPDF` by default; configure via `nnprofile`. For development installation and contribution guidelines, see the official NNPDF documentation.  
