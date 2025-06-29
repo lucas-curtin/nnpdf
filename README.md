@@ -4,159 +4,158 @@
 
 # t3_BSM_Comparison
 
-This repository contains code for performing a closure test and BSM Wilson‐coefficient reconstruction in the non‐singlet PDF channel t3(x). The main entry point is the T3_beta.py script, which:
+This repository implements **T3Net**, a compact neural-network framework for non-singlet PDF inference and minimal BSM sensitivity studies. It builds on:
+- The NNPDF approach to unbiased PDF determination via neural networks and Monte Carlo replicas [@nnpdf-code], [@Ball_2022]
+- The SimuNET methodology for embedding theory parameters into PDF fits [@simunet]
+- Bayesian Gaussian-process priors for PDFs [@bayesian]
 
-1. Loads and preprocesses BCDMS F2^p and F2^d data via the validphys API  
-2. Builds FK tables and covariance matrices  
-3. Constructs pseudo‐data for closure tests  
-4. Defines and trains neural‐network models (with and without a single BSM parameter C)  
-5. Produces plots comparing data vs. theory, uncertainty bands, sensitivity scans, and fitted Wilson‐coefficient distributions  
+**T3Net** replaces the GP prior with a small feed-forward network and focuses on the non-singlet combination  
+_T3(x) = u⁺(x) – d⁺(x)_,  
+probed by the proton–deuteron structure-function difference. We generate pseudo-data with realistic correlations, perform closure tests, and study the impact of adding a single BSM distortion parameter.
+
+---
+
+## Abstract
+
+Reliable collider predictions require both unbiased parton distribution functions (PDFs) and a clear separation between proton structure and potential effects from new physics. The NNPDF framework removes functional-form bias by fitting neural networks to Monte Carlo replicas of diverse data sets [@nnpdf-code; @Ball_2022], and SimuNET embeds additional theory parameters directly into the fit to prevent genuine beyond-Standard-Model (BSM) signals from being absorbed into PDFs [@simunet]. Candido et al. introduced a complementary Bayesian approach, using Gaussian processes as flexible priors and performing full inference over both PDF parameters and hyperparameters [@bayesian]. Their benchmarks on deep-inelastic scattering demonstrated rigorous uncertainty quantification and posterior validation. Inspired by that methodology, **T3Net** replaces the Gaussian process prior with a compact neural network and again focuses on the non-singlet combination _T₃(x) = u⁺ – d⁺_, probed by the proton–deuteron structure-function difference. Pseudo-data are generated from this difference with realistic experimental correlations as an input for the model. Closure tests on the fits confirm that fitting only standard QCD inputs recovers a reference distribution within its uncertainty band. Introducing a single extra theory parameter to capture generic BSM distortions uncovers a bias-variance trade-off. PDF uncertainties contract, coverage degrades, and the extra parameter is systematically underestimated. These artifacts trace back to uniform regularisation across all parameters and overly rigid constraint enforcement. By isolating these effects in a minimal setting, **T3Net** investigates the possible pitfalls in this approach and suggests avenues for future research.
 
 ---
 
 ## Requirements
 
-- Conda (>= 25) or Python 3.9+ with venv  
-- At least 4 GB free disk space to download data/theory ingredients  
-- (Optional) A GPU and CUDA drivers for faster PyTorch training  
+- **Conda** (>= 25) or **Python 3.9+** with `venv`  
+- ≥ 4 GB free disk space for data/theory ingredients  
+- (Optional) GPU + CUDA for faster PyTorch training  
 
 ---
 
 ## 1. Clone & initialize
 
-git clone https://github.com/yourusername/yourrepo.git  
-cd yourrepo  
+    git clone https://github.com/yourusername/yourrepo.git
+    cd yourrepo
 
 ---
 
 ## 2a. Install with Conda
 
-(Optional) Freeze your current setup:  
-pip freeze > requirements.txt  
+(Optional) freeze your current environment:
 
-Create environment.yml alongside requirements.txt:
+    pip freeze > requirements.txt
 
-name: environment_nnpdf_full  
-channels:  
-  - conda-forge  
-dependencies:  
-  - python=3.11  
-  - nnpdf=4.0.10  
-  - pip  
-  - pip:  
-    - -r requirements.txt  
+Create `environment.yml`:
 
-Create & activate the environment:  
-conda env create -f environment.yml  
-conda activate environment_nnpdf_full  
+    name: environment_nnpdf_full
+    channels:
+      - conda-forge
+    dependencies:
+      - python=3.11
+      - nnpdf=4.0.10
+      - pip
+      - pip:
+        - -r requirements.txt
+
+Then run:
+
+    conda env create -f environment.yml
+    conda activate environment_nnpdf_full
 
 ---
 
 ## 2b. Install with pip + venv
 
-python3 -m venv .env_nnpdf  
-source .env_nnpdf/bin/activate  
-pip install --upgrade pip  
-pip install \  
-  git+https://github.com/NNPDF/nnpdf.git@4.0.10 \  
-  -r requirements.txt  
-# Then manually install non-Python deps (LHAPDF, pandoc) as needed  
+    python3 -m venv .env_nnpdf
+    source .env_nnpdf/bin/activate
+    pip install --upgrade pip
+    pip install \
+      git+https://github.com/NNPDF/nnpdf.git@4.0.10 \
+      -r requirements.txt
+    # install LHAPDF and pandoc manually if needed
 
 ---
 
 ## 3. Running the script
 
-Once your environment is ready:
+    python T3_beta.py
 
-python T3_beta.py
-
-This will:  
-- Create model_states/ and results/ directories  
-- Fetch & preprocess BCDMS data  
-- Build FK tables and covariance matrices  
-- Train neural nets for each replica and configuration  
-- Save training results to training_results.pkl  
-- Generate plots in images/  
+This will:
+- Create `model_states/` and `results/`
+- Fetch & preprocess BCDMS data via `validphys`
+- Build FK tables & covariance matrices
+- Train neural nets (standard & BSM)
+- Save results to `training_results.pkl`
+- Generate plots in `images/`
 
 ---
 
 ## 4. Key files
 
-- T3_beta.py – The main workflow script  
-- environment.yml & requirements.txt – Reproducible environment specification  
-- training_results.pkl – Pickled DataFrame of fit results  
-- images/ – All generated plots  
+- `T3_beta.py` – Main workflow  
+- `environment.yml` & `requirements.txt` – Env spec  
+- `training_results.pkl` – Pickled fit results  
+- `images/` – Generated figures  
 
 ---
 
-## Downloading resources (theoryID 208 and others)
+## Downloading resources (theoryID 208, PDFs, fits)
 
-validphys can automatically download required resources — PDF sets, completed fits, theory definitions, and past validphys outputs — when you run code that needs them. By default it checks your local cache (configured in nnprofile) and if missing, fetches from the remote server.
+By default, **validphys** auto-downloads resources (PDF sets, fits, theories, outputs) when needed, checking your local cache (`nnprofile`) first and fetching from the remote server if missing. Example runcard:
 
-Example validphys runcard snippet:
+    pdf:   NNPDF40_nnlo_as_01180
+    fit:   NNPDF40_nlo_as_01180
+    theoryid: 208
+    use_cuts: "fromfit"
+    dataset_input:
+      dataset: ATLAS_DY_7TEV_36PB_ETA
+      cfac:   [EWK]
+    actions_:
+      - plot_fancy
+      - plot_chi2dist
 
-    pdf: NNPDF40_nnlo_as_01180  
-    fit: NNPDF40_nlo_as_01180  
-    theoryid: 208  
-    use_cuts: "fromfit"  
-    dataset_input:  
-      dataset: ATLAS_DY_7TEV_36PB_ETA  
-      cfac: [EWK]  
-    actions_:  
-      - plot_fancy  
-      - plot_chi2dist  
+To disable auto-download:
 
-When you execute validphys (or vp-setupfit), it will ensure the PDF set NNPDF40_nnlo_as_01180, the fit NNPDF40_nlo_as_01180, and the theory with ID 208 are present. If not found locally, they are downloaded and installed automatically. You rarely need manual intervention.
+    vp-setupfit --no-net ...
 
-To disable auto-download, pass `--no-net` to validphys tools. To force-enable, use `--net`.
+To force network use:
 
-### What can be downloaded
+    vp-setupfit --net ...
 
-- **Fits** (via `vp-get fit <name>`)  
-- **PDF sets** (from NNPDF or LHAPDF); fits imply their PDF sets  
-- **Theories** (by theoryID, e.g. 208)  
-- **validphys output files** stored in the server cache  
+### Manual download with `vp-get`
 
-### The `vp-get` tool
-
-Use `vp-get` to fetch resources manually:
-
-    vp-get --list
-    # shows available resource types: fit, pdf, theoryID, vp_output_file
-
+    vp-get --list    # list resource types
     vp-get fit NNPDF31_nlo_as_0118_1000
 
-If already installed, it reports the local path.
-
-### Programmatic downloads via Loader
-
-In Python, use the FallbackLoader to auto-download:
+### Programmatic via Loader
 
     from validphys.loader import FallbackLoader as Loader
     l = Loader()
-    # downloads theory 208 if missing
-    l.check_theoryID(208)
-
-The standard Loader only searches locally and will error if the resource isn’t present.
+    l.check_theoryID(208)  # downloads if missing
 
 ---
 
-## NNPDF-specific information
+## References
 
-Installing NNPDF requires:
-
-- A recent Python (3.9+), Linux or macOS  
-- ≥ 4 GB storage  
-
-Conda install (includes LHAPDF & pandoc):
-
-    conda create -n environment_nnpdf nnpdf -c conda-forge
-    conda activate environment_nnpdf
-
-Pip install (manual LHAPDF & pandoc):
-
-    python -m venv environment_nnpdf
-    source environment_nnpdf/bin/activate
-    python -m pip install git+https://github.com/NNPDF/nnpdf.git@4.0.10
-
-Shared data resides under `${CONDA_PREFIX}/share/NNPDF` by default; configure via `nnprofile`. For development installation and contribution guidelines, see the official NNPDF documentation.  
+```bibtex
+@article{nnpdf-code,
+  author  = {Ball, Richard D. and Carrazza, Stefano and … and NNPDF Collaboration},
+  title   = {An open-source machine learning framework for global analyses of parton distributions},
+  journal = {Eur. Phys. J. C}, volume = {81}, number = {10}, pages = {958}, year = {2021},
+  doi     = {10.1140/epjc/s10052-021-09747-9}
+}
+@article{Ball_2022,
+  author  = {Ball, Richard D. and Carrazza, Stefano and … and Wilson, Michael},
+  title   = {The path to proton structure at 1% accuracy: NNPDF Collaboration},
+  journal = {Eur. Phys. J. C}, volume = {82}, number = {5}, year = {2022},
+  doi     = {10.1140/epjc/s10052-022-10328-7}
+}
+@article{simunet,
+  author  = {Iranipour, Shayan and Ubiali, Maria},
+  title   = {A new generation of simultaneous fits to LHC data using deep learning},
+  journal = {JHEP}, number = {05}, pages = {032}, year = {2022},
+  doi     = {10.1007/JHEP05(2022)032}
+}
+@article{bayesian,
+  author  = {Candido, Alessandro and Del Debbio, Luigi and Giani, Tommaso and Petrillo, Giacomo},
+  title   = {Bayesian inference with Gaussian processes for the determination of parton distribution functions},
+  journal = {Eur. Phys. J. C}, volume = {84}, number = {7}, pages = {716}, year = {2024},
+  doi     = {10.1140/epjc/s10052-024-13100-1}
+}
