@@ -1,3 +1,10 @@
+# %% [markdown]
+# # t3_BSM_Comparison
+#
+# This notebook-style script performs a self-contained closure test and BSM Wilson-coefficient
+# reconstruction in the non-singlet PDF channel $t_3(x)$.
+
+# %%
 # %%
 """t3_BSM_Comparison."""
 
@@ -35,6 +42,12 @@ plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 image_dir = Path("images")
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 1
+#
+# Fetch raw BCDMS $F_2^p$ and $F_2^d$ tables, rename columns for clarity, and compute
+# the difference $y = F_2^p - F_2^d$.
+
 
 # %%
 # DATA LOADING & PREPROCESSING—PART 1: FETCH RAW TABLES
@@ -96,6 +109,11 @@ merged_df = df_p.merge(df_d, on=["x", "q2"], suffixes=("_p", "_d")).assign(
 # Extract q2_vals and y_real for later use
 q2_vals = merged_df["q2"].to_numpy()
 y_real = merged_df["y_val"].to_numpy()
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 2
+#
+# Build FK tables for proton and deuteron, extract the t3 channel (flavor index 2), and
+# form the convolution matrix $W$.
 
 
 # %%
@@ -119,6 +137,11 @@ W = wp_t3[entry_p_rel] - wd_t3[entry_d_rel]  # shape (n_data, n_grid)
 
 # Save xgrid for later normalization
 xgrid = fk_p.xgrid.copy()  # shape (n_grid,)
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 3
+#
+# Construct the covariance matrix $C_{yy}$ for $y$, extract sub-blocks for proton and
+# deuteron, symmetrize, and add jitter until positive-definite.
 
 # %%
 # DATA LOADING & PREPROCESSING—PART 3: COMPUTE C_YY & ITS INVERSE
@@ -168,9 +191,14 @@ else:
     msg = "Covariance matrix not positive-definite"
     raise RuntimeError(msg)
 
+# %% [markdown]
+# ## Compute Reference t3 for Closure
+#
+# Load the central PDF, compute the true non-singlet $x t_3(x)$, and generate pseudo-data
+# by adding correlated noise.
 
 # %%
-# DATA LOADING & PREPROCESSING—PART 5: COMPUTE t3_REF_NORM FOR CLOSURE
+# DATA LOADING & PREPROCESSING—PART 4: COMPUTE t3_REF_NORM FOR CLOSURE
 # ------------------------------------------------------------------------------
 logger.info("Computing reference t3 (t3_ref_norm) for closure test...")
 
@@ -198,6 +226,13 @@ rng = np.random.default_rng(seed=451)  # you can set seed if you want reproducib
 noise = rng.multivariate_normal(mean=np.zeros(len(y_theory)), cov=c_yy)
 
 y_pseudo = y_theory + noise
+# %% [markdown]
+# ## Preliminary Data Plots
+#
+# 1. Scatter real vs theory and pseudo vs theory
+# 2. Heatmap of mean difference
+# 3. Theory/data ratio with error bars
+# 4. Kinematic coverage subplots
 
 
 # %%
@@ -378,6 +413,12 @@ plt.suptitle("Kinematic Coverage of BCDMS $F_2^p$ and $F_2^d$", y=1.02)
 plt.savefig(image_dir / "kineamtic_coverage.png", bbox_inches="tight")
 plt.show()
 
+# %% [markdown]
+# ## Neural Network Definitions
+#
+# Define `T3Net` (no BSM) and `T3NetWithC` (with single parameter C) with preprocessing layers
+# for $x^\alpha (1-x)^\beta$
+
 # %%
 # NEURAL NETWORK MODEL DEFINITION
 # ------------------------------------------------------------------------------
@@ -466,8 +507,16 @@ class T3NetWithC(nn.Module):
         return self.base(x).squeeze()  # shape = (n_grid,)
 
 
+# %% [markdown]
+# ## Ansatz Functions & Configuration
+#
+# Build two ansatz shapes (K1, K2), normalize them, and prepare a `config` dict for standard
+# fits and sensitivity scans.
+
+
 # %%
-#  DEFINE BASE ANSATZ FUNCTIONS (NORMALIZED TO UNIT AMPLITUDE)
+# DEFINE BASE ANSATZ FUNCTIONS (NORMALIZED TO UNIT AMPLITUDE) AND BUILD CONFIG DICTIONARY
+# INCLUDING ORIGINAL FITS + SENSITIVITY SCANS
 q2_vals = merged_df["q2"].to_numpy()  # (n_data,)
 x_vals_data = merged_df["x"].to_numpy()  # (n_data,)
 Q2_min = q2_vals.min()
@@ -489,8 +538,6 @@ K_dict = {
 C_trues = [0.0, 0.1, 1]
 
 
-# %%
-# BUILD CONFIG DICTIONARY INCLUDING ORIGINAL FITS + SENSITIVITY SCANS
 config = {
     # Original fits (no BSM)
     "fit_real_real": {
@@ -551,7 +598,15 @@ for ansatz_name in ["ansatz1", "ansatz2"]:
             "ansatz": ansatz_name,
             "C_true": C_true,
         }
-
+# %% [markdown]
+# ## Training Loop
+#
+# For each config and replica:
+# 1. Split train/validation
+# 2. Prepare y-data (with or without BSM injection)
+# 3. Build covariance inverses
+# 4. Initialize model & optimizer
+# 5. Train with early stopping & logging
 
 # %%
 # TRAINING
@@ -734,6 +789,15 @@ for cfg_key, cfg in config.items():
 
 df_results = pd.DataFrame(all_results)
 df_results.to_pickle("training_results.pkl")
+
+
+# %% [markdown]
+# ## Results & Plotting
+#
+# - Filter by reduced chi squared: $\chi^2/{\rm pt}$ between 0.9 and 1.1
+# - Plot real vs pseudo fits, sensitivity scans, alpha-beta ellipses, and C_fit
+#   distributions in separate cells.
+
 
 # %%
 # Load in for plotting
