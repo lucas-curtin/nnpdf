@@ -186,18 +186,18 @@ for i, x in enumerate(xgrid):
     db = pdf0.xfxQ(-1, x, Q0)
     xt3_true[i] = (u - ub) - (d - db)
 
-# 2) Convolution ⇒ noiseless pseudo-data:
-y_theory = W @ (xt3_true)  # shape (N,)
-
-# 3) Add experimental noise drawn from Cyy:
-rng = np.random.default_rng(seed=451)  # you can set seed if you want reproducible “data”
-noise = rng.multivariate_normal(mean=np.zeros(len(y_theory)), cov=c_yy)
-
-y_pseudo = y_theory + noise
 
 t3 = xt3_true / xgrid
 
 t3_ref_int = np.trapz(xt3_true / xgrid, xgrid)  # noqa: NPY201
+
+
+y_theory = W @ (xt3_true)  # shape (N,)
+
+rng = np.random.default_rng(seed=451)  # you can set seed if you want reproducible “data”
+noise = rng.multivariate_normal(mean=np.zeros(len(y_theory)), cov=c_yy)
+
+y_pseudo = y_theory + noise
 
 
 # %%
