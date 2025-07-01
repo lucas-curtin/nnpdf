@@ -45,14 +45,6 @@ In T3_beta.py, we deliberately condense the entire workflow into a single, self-
 
 ---
 
-## Requirements
-
-- Conda (>= 25) or Python 3.9+ with venv  
-- ≥ 4 GB free disk space for data/theory ingredients  
-- (Optional) GPU + CUDA for faster PyTorch training  
-
----
-
 ## 1. Clone & initialize
 
 git clone git@gitlab.developers.cam.ac.uk:phy/data-intensive-science-mphil/assessments/projects/lc2010.git 
@@ -61,23 +53,25 @@ git clone git@gitlab.developers.cam.ac.uk:phy/data-intensive-science-mphil/asses
 
 ## 2a. Install with Conda
 
-(Optional) freeze your current environment:  
-pip freeze > requirements.txt  
-
+```bash
 conda env create -f environment.yml  
 conda activate environment_nnpdf_full  
+```
+
+This may change over time, make sure to double check any changes to NNPDF installation.
 
 ---
 
 ## 2b. Install with pip + venv
-
+```bash
 python3 -m venv .env_nnpdf  
 source .env_nnpdf/bin/activate  
 pip install --upgrade pip  
 pip install \  
   git+https://github.com/NNPDF/nnpdf.git@4.0.10 \  
   -r requirements.txt  
-# install LHAPDF and pandoc manually if needed  
+
+```
 
 ---
 
@@ -92,6 +86,9 @@ This will:
 - Train neural nets (standard & BSM)  
 - Save results to training_results.pkl  
 - Generate plots in images/  
+
+
+It also uses iPython, rather than a traditional notebook to ensure formatters and linters can actually work.
 
 ---
 
@@ -118,6 +115,8 @@ vp-get pdf NNPDF40_nnlo_as_01180
 # 3) (If you want to include the fit itself)
 vp-get fit NNPDF40_nlo_as_01180
 ```
+
+For reproducing the results of this study, this should suffice. Note this should be done after the environment is created.
 ---
 
 ## References
