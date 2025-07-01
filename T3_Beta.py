@@ -257,7 +257,7 @@ plt.scatter(
     s=18,
     alpha=0.6,
     color="C1",
-    label=r"Pseudo-Data: $y_{pseudo} = W\,t_{3}^{NNPDF} + \eta$",
+    label=r"Pseudo-Data: $y_{pseudo} = W\,xt_{3}^{NNPDF} + \eta$",
 )
 
 # 3) Diagonal y = x (gray dashed line)
