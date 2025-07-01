@@ -3,12 +3,16 @@
 </p>
 
 
-This repository implements **T3Net**, a compact neural-network framework for non-singlet PDF inference and minimal BSM sensitivity studies. It builds on:
+This repository implements **T3Net**, a neural network framework for non-singlet PDF inference and minimal BSM sensitivity studies. It builds on:
 - The NNPDF approach to unbiased PDF determination via neural networks and Monte Carlo replicas [1][2]
 - The SIMUnet methodology for embedding theory parameters into PDF fits [3]
-- Bayesian Gaussian-process priors for PDFs [4]. This is the core inspiration for this analysis, and should be consulted in detail to understand the origin of the methodology.
+- Bayesian Gaussian process priors for PDFs [4]. This is the core inspiration for this analysis, and should be consulted in detail to understand the origin of the methodology.
 
-It's also important to note that this work has been forked from NNPDF, so the user can actually see the available common data and run tutorial scripts as they are updated. If there is any confusion about what work is unique to this study, it is ENTIRELY contained in T3_beta.py, and the original repo lives at: https://github.com/NNPDF/
+It's also important to note that this work has been forked from NNPDF, so the user can actually see the available common data and run tutorial scripts as they are updated. 
+
+If there is any confusion about what work is unique to this study, it is entirely contained in T3_beta.py, and the original NNPDF repository lives at [https://github.com/NNPDF/](https://github.com/NNPDF/)
+
+It would also be helpful to go through the NNPDF documentation, if you have specific questions about either ValidPhys or any of the underlying theory [https://docs.nnpdf.science/](https://docs.nnpdf.science/)
 
 **T3Net** replaces the GP prior from [4] with a small feed-forward network and focuses on the non-singlet combination  
 T3(x) = u⁺(x) − d⁺(x),  
@@ -136,7 +140,7 @@ Portions of this repository—including the README, figures, in-code comments an
 
 - Generate and polish all plotting routines (including LaTeX‐style labels and publication-ready layouts).  
 - Interpret and streamline ValidPhys API calls for data loading, covariance assembly and FK-table construction.  
-- Propose inline documentation, code structure outlines and early drafts of the data pipeline and training loops.  
+- Propose inline documentation, helpful guides for the README, code structure outlines and early drafts of the data pipeline and training loops.  
 - Ensure consistent UK-English phrasing, formatting of markdown cells, and structuring of the README and notebook headers.
 
 Every AI-generated suggestion has been personally reviewed, edited, tested and verified by the author to guarantee full scientific accuracy, reproducibility and clarity. All code and results presented here reflect definitive, author-approved iterations.
