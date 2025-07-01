@@ -133,7 +133,7 @@ wd_t3 = wd[:, t3_index, :]
 
 entry_p_rel = merged_df["entry_p"].to_numpy() - 1
 entry_d_rel = merged_df["entry_d"].to_numpy() - 1
-W = wp_t3[entry_p_rel] - 0.5 * wd_t3[entry_d_rel]  # shape (n_data, n_grid)
+W = wp_t3[entry_p_rel] - wd_t3[entry_d_rel]  # shape (n_data, n_grid)
 
 # Save xgrid for later normalization
 xgrid = fk_p.xgrid.copy()  # shape (n_grid,)
