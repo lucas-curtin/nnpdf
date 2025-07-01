@@ -2,7 +2,6 @@
   <img src="logo.png" alt="T3Net Logo" width="200"/>
 </p>
 
-# t3_BSM_Comparison
 
 This repository implements **T3Net**, a compact neural-network framework for non-singlet PDF inference and minimal BSM sensitivity studies. It builds on:
 - The NNPDF approach to unbiased PDF determination via neural networks and Monte Carlo replicas [1][2]
@@ -56,8 +55,7 @@ In T3_beta.py, we deliberately condense the entire workflow into a single, self-
 
 ## 1. Clone & initialize
 
-git clone https://github.com/yourusername/yourrepo.git  
-cd yourrepo  
+git clone git@gitlab.developers.cam.ac.uk:phy/data-intensive-science-mphil/assessments/projects/lc2010.git 
 
 ---
 
@@ -65,20 +63,6 @@ cd yourrepo
 
 (Optional) freeze your current environment:  
 pip freeze > requirements.txt  
-
-Create environment.yml:
-
-name: environment_nnpdf_full  
-channels:  
-  - conda-forge  
-dependencies:  
-  - python=3.11  
-  - nnpdf=4.0.10  
-  - pip  
-  - pip:  
-    - -r requirements.txt  
-
-Then:
 
 conda env create -f environment.yml  
 conda activate environment_nnpdf_full  
@@ -142,3 +126,17 @@ vp-get fit NNPDF40_nlo_as_01180
 2. R. D. Ball et al., “The path to proton structure at 1 % accuracy: NNPDF Collaboration,” Eur. Phys. J. C 82 (2022) 10328, doi:10.1140/epjc/s10052-022-10328-7  
 3. S. Iranipour and M. Ubiali, “A new generation of simultaneous fits to LHC data using deep learning,” JHEP 05 (2022) 032, doi:10.1007/JHEP05(2022)032  
 4. A. Candido et al., “Bayesian inference with Gaussian processes for the determination of parton distribution functions,” Eur. Phys. J. C 84 (2024) 716, doi:10.1140/epjc/s10052-024-13100-1  
+
+
+## AI Declaration
+
+
+Portions of this repository—including the README, figures, in-code comments and this notebook—were drafted and refined with the assistance of AI tools. In particular, AI support was used to:
+
+- Generate and polish all plotting routines (including LaTeX‐style labels and publication-ready layouts).  
+- Interpret and streamline ValidPhys API calls for data loading, covariance assembly and FK-table construction.  
+- Propose inline documentation, code structure outlines and early drafts of the data pipeline and training loops.  
+- Ensure consistent UK-English phrasing, formatting of markdown cells, and structuring of the README and notebook headers.
+
+Every AI-generated suggestion has been personally reviewed, edited, tested and verified by the author to guarantee full scientific accuracy, reproducibility and clarity. All code and results presented here reflect definitive, author-approved iterations.
+
