@@ -5,8 +5,10 @@
 
 This repository implements **T3Net**, a compact neural-network framework for non-singlet PDF inference and minimal BSM sensitivity studies. It builds on:
 - The NNPDF approach to unbiased PDF determination via neural networks and Monte Carlo replicas [1][2]
-- The SimuNET methodology for embedding theory parameters into PDF fits [3]
+- The SIMUnet methodology for embedding theory parameters into PDF fits [3]
 - Bayesian Gaussian-process priors for PDFs [4]. This is the core inspiration for this analysis, and should be consulted in detail to understand the origin of the methodology.
+
+It's also important to note that this work has been forked from NNPDF, so the user can actually see the available common data and run tutorial scripts as they are updated. If there is any confusion about what work is unique to this study, it is ENTIRELY contained in T3_beta.py, and the original repo lives at: https://github.com/NNPDF/
 
 **T3Net** replaces the GP prior from [4] with a small feed-forward network and focuses on the non-singlet combination  
 T3(x) = u⁺(x) − d⁺(x),  
@@ -16,13 +18,13 @@ probed by the proton–deuteron structure-function difference. We generate pseud
 
 ## Abstract
 
-Reliable collider predictions require both unbiased parton distribution functions (PDFs) and a clear separation between proton structure and potential effects from new physics. The NNPDF framework removes functional-form bias by fitting neural networks to Monte Carlo replicas of diverse data sets [1][2], and SimuNET embeds additional theory parameters directly into the fit to prevent genuine beyond-Standard-Model (BSM) signals from being absorbed into PDFs [3]. Candido et al. introduced a complementary Bayesian approach, using Gaussian processes as flexible priors and performing full inference over both PDF parameters and hyperparameters [4]. Their benchmarks on deep-inelastic scattering demonstrated rigorous uncertainty quantification and posterior validation. Inspired by that methodology, **T3Net** replaces the Gaussian process prior with a compact neural network and again focuses on the non-singlet combination T3(x) = u⁺ − d⁺, probed by the proton–deuteron structure-function difference. Pseudo-data are generated from this difference with realistic experimental correlations as an input for the model. Closure tests on the fits confirm that fitting only standard QCD inputs recovers a reference distribution within its uncertainty band. Introducing a single extra theory parameter to capture generic BSM distortions uncovers a bias–variance trade-off. PDF uncertainties contract, coverage degrades, and the extra parameter is systematically underestimated. These artifacts trace back to uniform regularisation across all parameters and overly rigid constraint enforcement. By isolating these effects in a minimal setting, **T3Net** investigates pitfalls in this approach and suggests avenues for future research.
+Reliable collider predictions require both unbiased parton distribution functions (PDFs) and a clear separation between proton structure and potential effects from new physics. The NNPDF framework removes functional-form bias by fitting neural networks to Monte Carlo replicas of diverse data sets [1][2], and SIMUnet embeds additional theory parameters directly into the fit to prevent genuine beyond-Standard-Model (BSM) signals from being absorbed into PDFs [3]. Candido et al. introduced a complementary Bayesian approach, using Gaussian processes as flexible priors and performing full inference over both PDF parameters and hyperparameters [4]. Their benchmarks on deep-inelastic scattering demonstrated rigorous uncertainty quantification and posterior validation. Inspired by that methodology, **T3Net** replaces the Gaussian process prior with a compact neural network and again focuses on the non-singlet combination T3(x) = u⁺ − d⁺, probed by the proton–deuteron structure-function difference. Pseudo-data are generated from this difference with realistic experimental correlations as an input for the model. Closure tests on the fits confirm that fitting only standard QCD inputs recovers a reference distribution within its uncertainty band. Introducing a single extra theory parameter to capture generic BSM distortions uncovers a bias–variance trade-off. PDF uncertainties contract, coverage degrades, and the extra parameter is systematically underestimated. These artifacts trace back to uniform regularisation across all parameters and overly rigid constraint enforcement. By isolating these effects in a minimal setting, **T3Net** investigates pitfalls in this approach and suggests avenues for future research.
 
 
 ---
 ## Code Structure and Approach
 
-NNPDF and SimuNET are built for large-scale, global PDF fits—frameworks with many moving parts, extensive configuration files, and multi-step workflows. For smaller, focused studies like T3Net, this complexity can obscure the core logic and make rapid prototyping or targeted analyses cumbersome.
+NNPDF and SIMUnet are built for large-scale, global PDF fits—frameworks with many moving parts, extensive configuration files, and multi-step workflows. For smaller, focused studies like T3Net, this complexity can obscure the core logic and make rapid prototyping or targeted analyses cumbersome.
 
 In T3_beta.py, we deliberately condense the entire workflow into a single, self-contained script. This design serves three main goals:
 
