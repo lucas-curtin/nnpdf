@@ -1,3 +1,10 @@
+# %% [markdown]
+# # t3_BSM_Comparison
+#
+# This notebook-style script performs a self-contained closure test and BSM Wilson-coefficient
+# reconstruction in the non-singlet PDF channel $t_3(x)$.
+
+# %%
 # %%
 """t3_BSM_Comparison."""
 
@@ -35,9 +42,15 @@ plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 image_dir = Path("images")
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 1
+#
+# Fetch raw BCDMS $F_2^p$ and $F_2^d$ tables, rename columns for clarity, and compute
+# the difference $y = F_2^p - F_2^d$.
+
 
 # %%
-# 1. DATA LOADING & PREPROCESSING—PART 1: FETCH RAW TABLES
+# DATA LOADING & PREPROCESSING—PART 1: FETCH RAW TABLES
 # ------------------------------------------------------------------------------
 logger.info("Loading BCDMS F2 data from validphys API...")
 
@@ -96,10 +109,15 @@ merged_df = df_p.merge(df_d, on=["x", "q2"], suffixes=("_p", "_d")).assign(
 # Extract q2_vals and y_real for later use
 q2_vals = merged_df["q2"].to_numpy()
 y_real = merged_df["y_val"].to_numpy()
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 2
+#
+# Build FK tables for proton and deuteron, extract the t3 channel (flavor index 2), and
+# form the convolution matrix $W$.
 
 
 # %%
-# 2. DATA LOADING & PREPROCESSING—PART 2: BUILD FK TABLES & W
+# DATA LOADING & PREPROCESSING—PART 2: BUILD FK TABLES & W
 # ------------------------------------------------------------------------------
 logger.info("Building FK tables and computing convolution matrix W for t3 channel...")
 
@@ -119,9 +137,14 @@ W = wp_t3[entry_p_rel] - wd_t3[entry_d_rel]  # shape (n_data, n_grid)
 
 # Save xgrid for later normalization
 xgrid = fk_p.xgrid.copy()  # shape (n_grid,)
+# %% [markdown]
+# ## Data Loading & Preprocessing — Part 3
+#
+# Construct the covariance matrix $C_{yy}$ for $y$, extract sub-blocks for proton and
+# deuteron, symmetrize, and add jitter until positive-definite.
 
 # %%
-# 3. DATA LOADING & PREPROCESSING—PART 3: COMPUTE C_YY & ITS INVERSE
+# DATA LOADING & PREPROCESSING—PART 3: COMPUTE C_YY & ITS INVERSE
 # ------------------------------------------------------------------------------
 logger.info("Building covariance matrix c_yy for y = F2_p - F2_d...")
 
@@ -168,38 +191,52 @@ else:
     msg = "Covariance matrix not positive-definite"
     raise RuntimeError(msg)
 
+# %% [markdown]
+# ## Compute Reference t3 for Closure
+#
+# Load the central PDF, compute the true non-singlet $x t_3(x)$, and generate pseudo-data
+# by adding correlated noise.
 
 # %%
-# 5. DATA LOADING & PREPROCESSING—PART 5: COMPUTE t3_REF_NORM FOR CLOSURE
+# DATA LOADING & PREPROCESSING—PART 4: COMPUTE t3_REF_NORM FOR CLOSURE
 # ------------------------------------------------------------------------------
 logger.info("Computing reference t3 (t3_ref_norm) for closure test...")
 
 pdfset = lhapdf.getPDFSet("NNPDF40_nnlo_as_01180")
 pdf0 = pdfset.mkPDF(0)
 Q0 = fk_p.Q0
-t3_true = np.zeros_like(xgrid)
+xt3_true = np.zeros_like(xgrid)
 
 for i, x in enumerate(xgrid):
-    u = pdf0.xfxQ(2, x, Q0)  # x·u(x)
-    ub = pdf0.xfxQ(-2, x, Q0)  # x·ū(x)
-    d = pdf0.xfxQ(1, x, Q0)  # x·d(x)
-    db = pdf0.xfxQ(-1, x, Q0)  # x·d̄(x)
-    t3_true[i] = (u - ub) - (d - db)
+    u = pdf0.xfxQ(2, x, Q0)
+    ub = pdf0.xfxQ(-2, x, Q0)
+    d = pdf0.xfxQ(1, x, Q0)
+    db = pdf0.xfxQ(-1, x, Q0)
+    xt3_true[i] = (u - ub) - (d - db)
 
-# 2) Convolution ⇒ noiseless pseudo-data:
-y_theory = W @ (t3_true)  # shape (N,)
 
-# 3) Add experimental noise drawn from Cyy:
+t3 = xt3_true / xgrid
+
+t3_ref_int = np.trapz(xt3_true / xgrid, xgrid)  # noqa: NPY201
+
+
+y_theory = W @ (xt3_true)  # shape (N,)
+
 rng = np.random.default_rng(seed=451)  # you can set seed if you want reproducible “data”
 noise = rng.multivariate_normal(mean=np.zeros(len(y_theory)), cov=c_yy)
 
 y_pseudo = y_theory + noise
-
-t3_ref_int = np.trapz(t3_true / xgrid, xgrid)  # noqa: NPY201
+# %% [markdown]
+# ## Preliminary Data Plots
+#
+# 1. Scatter real vs theory and pseudo vs theory
+# 2. Heatmap of mean difference
+# 3. Theory/data ratio with error bars
+# 4. Kinematic coverage subplots
 
 
 # %%
-# ? PRELIM DATA PLOTS
+# PRELIM DATA PLOTS
 plt.figure()
 
 # 1) Real data vs. Theory (open blue circles)
@@ -220,7 +257,7 @@ plt.scatter(
     s=18,
     alpha=0.6,
     color="C1",
-    label=r"Pseudo-Data: $y_{pseudo} = W\,t_{3}^{NNPDF} + \eta$",
+    label=r"Pseudo-Data: $y_{pseudo} = W\,xt_{3}^{NNPDF} + \eta$",
 )
 
 # 3) Diagonal y = x (gray dashed line)
@@ -253,11 +290,9 @@ plt.show()
 
 
 # %%
-# ? Heatmap
-# 1) (Exactly as before) add y_theory into merged_df
+# Heatmap Plot
 merged_df["y_theory"] = y_theory
 
-# 2) Pivot on (q2, x), taking the mean of y_val (data) and y_theory
 pivot_real = (
     merged_df.pivot_table(index="q2", columns="x", values="y_val", aggfunc="mean")
     .sort_index(axis=0)
@@ -268,16 +303,14 @@ pivot_theory = (
     .sort_index(axis=0)
     .sort_index(axis=1)
 )
-
-# 3) Compute the difference: ⟨y_data⟩ - ⟨y_theory⟩
 pivot_diff = pivot_real - pivot_theory
 
-# 4) Extract the (sorted) x and Q² grids
+
 x_vals = pivot_real.columns.to_numpy()  # (N_x,)
 q2_vals = pivot_real.index.to_numpy()  # (N_q2,)
 X_grid, Y_grid = np.meshgrid(x_vals, q2_vals)
 
-# 5) Plot a single heatmap of (⟨y_data⟩ - ⟨y_theory⟩)
+
 fig, ax = plt.subplots(figsize=(7, 6))
 
 pcm = ax.pcolormesh(
@@ -302,14 +335,15 @@ plt.show()
 
 # %%
 # ? Theory Comparison
-# 1) Compute sigma_i = sqrt(diagonal(C_yy))_i  divided by y_real_i
+
+# Compute sigma_i = sqrt(diagonal(C_yy))_i  divided by y_real_i
 sigma = np.abs(np.sqrt(np.diag(c_yy)) / y_real)
 
-# 2) Make an index array to place points on the x-axis
+# Make an index array to place points on the x-axis
 x_idx = np.arange(len(y_theory))  # 0, 1, 2, … N-1
 ref = np.ones_like(y_theory)  # reference = 1 for “data/theory = 1”
 
-# 3) Plot
+
 plt.figure(figsize=(20, 5))
 plt.errorbar(
     x_idx,
@@ -338,7 +372,7 @@ plt.savefig(image_dir / "data_theory_error_comp.png", bbox_inches="tight")
 plt.show()
 
 # %%
-# ? Kinematic Plot
+# Kinematic Plot
 fig, (ax_p, ax_d) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
 
 # Proton subplot
@@ -379,8 +413,14 @@ plt.suptitle("Kinematic Coverage of BCDMS $F_2^p$ and $F_2^d$", y=1.02)
 plt.savefig(image_dir / "kineamtic_coverage.png", bbox_inches="tight")
 plt.show()
 
+# %% [markdown]
+# ## Neural Network Definitions
+#
+# Define `T3Net` (no BSM) and `T3NetWithC` (with single parameter C) with preprocessing layers
+# for $x^\alpha (1-x)^\beta$
+
 # %%
-# 7. NEURAL NETWORK MODEL DEFINITION
+# NEURAL NETWORK MODEL DEFINITION
 # ------------------------------------------------------------------------------
 
 
@@ -467,8 +507,16 @@ class T3NetWithC(nn.Module):
         return self.base(x).squeeze()  # shape = (n_grid,)
 
 
+# %% [markdown]
+# ## Ansatz Functions & Configuration
+#
+# Build two ansatz shapes (K1, K2), normalize them, and prepare a `config` dict for standard
+# fits and sensitivity scans.
+
+
 # %%
-# ─── 1) DEFINE BASE ANSATZ FUNCTIONS (NORMALIZED TO UNIT AMPLITUDE) ───
+# DEFINE BASE ANSATZ FUNCTIONS (NORMALIZED TO UNIT AMPLITUDE) AND BUILD CONFIG DICTIONARY
+# INCLUDING ORIGINAL FITS + SENSITIVITY SCANS
 q2_vals = merged_df["q2"].to_numpy()  # (n_data,)
 x_vals_data = merged_df["x"].to_numpy()  # (n_data,)
 Q2_min = q2_vals.min()
@@ -487,10 +535,9 @@ K_dict = {
     "ansatz2": torch.tensor(K2_unit, dtype=torch.float32, device=device),
 }
 
-# ─── 2) DEFINE GRID OF “TRUE” C VALUES FOR SENSITIVITY SCAN ───
 C_trues = [0.0, 0.1, 1]
 
-# ─── 3) BUILD CONFIG DICTIONARY INCLUDING ORIGINAL FITS + SENSITIVITY SCANS ───
+
 config = {
     # Original fits (no BSM)
     "fit_real_real": {
@@ -551,18 +598,27 @@ for ansatz_name in ["ansatz1", "ansatz2"]:
             "ansatz": ansatz_name,
             "C_true": C_true,
         }
+# %% [markdown]
+# ## Training Loop
+#
+# For each config and replica:
+# 1. Split train/validation
+# 2. Prepare y-data (with or without BSM injection)
+# 3. Build covariance inverses
+# 4. Initialize model & optimizer
+# 5. Train with early stopping & logging
 
-
-# ─── 4) PREPARE FIXED TENSORS FOR TRAINING ───
+# %%
+# TRAINING
 n_data = W.shape[0]
 n_grid = xgrid.shape[0]
 W_torch = torch.tensor(W, dtype=torch.float32, device=device)
 x_torch = torch.tensor(xgrid, dtype=torch.float32).unsqueeze(1).to(device)
-# %%
-# Collect all results here
+
+
 all_results = []
 
-# ─── 5) OUTER LOOP OVER CONFIG ENTRIES ───
+
 for cfg_key, cfg in config.items():
     input_key = cfg["input_key"]
     n_hidden = cfg["n_hidden"]
@@ -592,7 +648,7 @@ for cfg_key, cfg in config.items():
 
         if is_bsm:
             K_torch = K_dict[ansatz_name]
-            y_theory_bsm = (W @ t3_true) * (1.0 + C_true * K_torch.cpu().numpy())
+            y_theory_bsm = (W @ t3) * (1.0 + C_true * K_torch.cpu().numpy())
             y_select = rng.multivariate_normal(y_theory_bsm, c_yy)
         else:
             y_select = {"real_real": y_real.copy(), "pseudo_replica": y_pseudo_replica}[input_key]
@@ -730,20 +786,29 @@ for cfg_key, cfg in config.items():
             },
         )
 
-# ─── 6) COMBINE INTO DATAFRAME AND SAVE ───
+
 df_results = pd.DataFrame(all_results)
 df_results.to_pickle("training_results.pkl")
 
+
+# %% [markdown]
+# ## Results & Plotting
+#
+# - Filter by reduced chi squared: $\chi^2/{\rm pt}$ between 0.9 and 1.1
+# - Plot real vs pseudo fits, sensitivity scans, alpha-beta ellipses, and C_fit
+#   distributions in separate cells.
+
+
 # %%
-# ─── 7) LOAD FOR PLOTTING ───
+# Load in for plotting
 
 df_raw = pd.read_pickle("training_results.pkl").reset_index()
 
+# Then reduced Chi squared filter
 df_results = df_raw.loc[lambda df: (df["chi2_pt"] < 1.1) & (df["chi2_pt"] > 0.9)]
+
 # %%
-# ---------------------------------------------------------------------
-# 8a) UPDATED PLOTTING: 1x2 COMPARISON WITH INLINE METRICS
-# ---------------------------------------------------------------------
+# Real Pseudo Comp Plot
 fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5), sharex=True, sharey=True)
 comparison_keys = ["fit_real_real", "fit_pseudo_replica"]
 comparison_map = dict(zip(comparison_keys, axes))
@@ -767,7 +832,7 @@ for cfg_key, ax in comparison_map.items():
     avg_sigma = np.mean(std_f)
     chi_vals = subset["chi2_pt"].to_numpy()
     mean_chi = np.mean(chi_vals)
-    pct_within = 100 * np.sum(np.abs(t3_true - mean_f) <= std_f) / len(t3_true)
+    pct_within = 100 * np.sum(np.abs(xt3_true - mean_f) <= std_f) / len(xt3_true)
 
     # Plot ±1sigma band
     ax.fill_between(
@@ -783,7 +848,7 @@ for cfg_key, ax in comparison_map.items():
     # Plot truth
     ax.plot(
         xgrid,
-        t3_true,
+        xt3_true,
         color="k",
         linestyle="--",
         linewidth=1.5,
@@ -800,8 +865,7 @@ plt.tight_layout()
 plt.savefig(image_dir / "realvspseudofit.png", bbox_inches="tight")
 plt.show()
 # %%
-# --- 8b) FINAL PLOTTING: 2x3 GRID WITH METRICS, REFINED TITLES ---
-
+# Sensitivtiy Scan plots
 
 # Define ansatzes and C_true values
 ansatzes = ["ansatz1", "ansatz2"]
@@ -838,7 +902,6 @@ for i, ansatz in enumerate(ansatzes):
         avg_sigma = np.mean(std_f)
         chi_vals = subset["chi2_pt"].to_numpy()
         mean_chi = np.mean(chi_vals)
-        pct_within = 100 * np.sum(np.abs(t3_true - mean_f) <= std_f) / len(t3_true)
 
         # Plot uncertainty band
         ax.fill_between(
@@ -860,11 +923,11 @@ for i, ansatz in enumerate(ansatzes):
         # Plot truth with percentage
         ax.plot(
             xgrid,
-            t3_true,
+            xt3_true,
             color="k",
             linestyle="--",
             linewidth=1.5,
-            label=rf"Within $1\sigma={pct_within:.1f}\%$",
+            label="Baseline",
         )
 
         # Column titles = plain values
@@ -887,8 +950,9 @@ plt.tight_layout(rect=[0, 0, 1, 0.89])
 plt.savefig(image_dir / "sensitivity_scan.png", bbox_inches="tight")
 plt.show()
 
+
 # %%
-# --- 8c) COMPARISON: Fixed-PDF vs BSM joint fit (C_true=0) ---
+# Fixed-PDF vs BSM joint fit
 
 ansatzes = ["ansatz1", "ansatz2"]
 doctitles = {"ansatz1": "Ansatz 1", "ansatz2": "Ansatz 2"}
@@ -902,7 +966,7 @@ all_f_nb = np.vstack(subset_nb["f_raw_best"].values)
 mean_nb = np.mean(all_f_nb, axis=0)
 std_nb = np.std(all_f_nb, axis=0)
 avg_sigma_nb = np.mean(std_nb)
-pct_within_nb = 100 * np.sum(np.abs(t3_true - mean_nb) <= std_nb) / len(t3_true)
+pct_within_nb = 100 * np.sum(np.abs(xt3_true - mean_nb) <= std_nb) / len(xt3_true)
 
 for ax, ansatz in zip(axes, ansatzes):
     # Compute BSM joint-fit statistics for C_true=0
@@ -912,7 +976,7 @@ for ax, ansatz in zip(axes, ansatzes):
     mean_bsm = np.mean(all_f_bsm, axis=0)
     std_bsm = np.std(all_f_bsm, axis=0)
     avg_sigma_bsm = np.mean(std_bsm)
-    pct_within_bsm = 100 * np.sum(np.abs(t3_true - mean_bsm) <= std_bsm) / len(t3_true)
+    pct_within_bsm = 100 * np.sum(np.abs(xt3_true - mean_bsm) <= std_bsm) / len(xt3_true)
 
     # Plot Fixed-PDF ±1sigma band and mean
     ax.fill_between(
@@ -949,7 +1013,7 @@ for ax, ansatz in zip(axes, ansatzes):
     # Plot true t3(x)
     ax.plot(
         xgrid,
-        t3_true,
+        xt3_true,
         color="k",
         linestyle="--",
         linewidth=1.5,
@@ -973,161 +1037,9 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.savefig(image_dir / "comparison_nonbsm_vs_bsm.png", bbox_inches="tight")
 plt.show()
 
-# %%
-# --- 8d) HISTOGRAMS: distribution of sigma_i(x) for each fit ---
-
-sigma_fixed_pdf = std_nb
-
-sigma_joint_ansatz1 = np.std(
-    np.vstack(df_results[df_results["config_key"] == "sens_ansatz1_C0e+00"]["f_raw_best"].values),
-    axis=0,
-)
-sigma_joint_ansatz2 = np.std(
-    np.vstack(df_results[df_results["config_key"] == "sens_ansatz2_C0e+00"]["f_raw_best"].values),
-    axis=0,
-)
-
-# 2) Compute their means
-mean_sigma_fixed_pdf = np.mean(sigma_fixed_pdf)
-mean_sigma_joint_ansatz1 = np.mean(sigma_joint_ansatz1)
-mean_sigma_joint_ansatz2 = np.mean(sigma_joint_ansatz2)
-
-# 3) Create shared bins across all three
-all_sigmas = np.concatenate([sigma_fixed_pdf, sigma_joint_ansatz1, sigma_joint_ansatz2])
-number_of_bins = 30
-shared_bins = np.linspace(all_sigmas.min(), all_sigmas.max(), number_of_bins + 1)
-
-# 4) Plot overlapping histograms
-plt.figure(figsize=(8, 6))
-
-plt.hist(
-    sigma_fixed_pdf,
-    bins=shared_bins,
-    density=True,
-    alpha=0.4,
-    label=rf"Fixed-PDF: $\langle\sigma\rangle = {mean_sigma_fixed_pdf:.4f}$",
-    color="C3",
-)
-plt.hist(
-    sigma_joint_ansatz1,
-    bins=shared_bins,
-    density=True,
-    alpha=0.4,
-    label=rf"Joint fit (Ansatz 1): $\langle\sigma\rangle = {mean_sigma_joint_ansatz1:.4f}$",
-    color="C4",
-)
-plt.hist(
-    sigma_joint_ansatz2,
-    bins=shared_bins,
-    density=True,
-    alpha=0.4,
-    label=rf"Joint fit (Ansatz 2): $\langle\sigma\rangle = {mean_sigma_joint_ansatz2:.4f}$",
-    color="C5",
-)
-
-# 5) Vertical dashed lines at the means
-for mean_value, color in zip(
-    [mean_sigma_fixed_pdf, mean_sigma_joint_ansatz1, mean_sigma_joint_ansatz2],
-    ["C3", "C4", "C5"],
-):
-    plt.axvline(
-        x=mean_value,
-        linestyle="--",
-        linewidth=2,
-        color=color,
-    )
-
-# 6) Labels, title, legend, grid
-plt.xlabel(r"$\sigma_i = \mathrm{StdDev}\bigl[t_3(x_i)\bigr]$", fontsize=12)
-plt.ylabel(r"Probability density", fontsize=12)
-plt.title(
-    r"Histogram of pointwise standard deviations $\sigma_i$ for each fit",
-    fontsize=14,
-)
-plt.legend(fontsize=10)
-plt.grid(alpha=0.2)
-plt.tight_layout()
-plt.show()
 
 # %%
-# --- 8e) χ²/pt distributions with proper LaTeX and valid-region percentages ---
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Extract unfiltered χ²/pt arrays
-chi_fixed = df_raw.loc[df_raw["config_key"] == "fit_pseudo_replica", "chi2_pt"].to_numpy()
-chi_sens1 = df_raw.loc[df_raw["config_key"] == "sens_ansatz1_C0e+00", "chi2_pt"].to_numpy()
-chi_sens2 = df_raw.loc[df_raw["config_key"] == "sens_ansatz2_C0e+00", "chi2_pt"].to_numpy()
-
-# Define valid χ²/pt interval
-lower, upper = 0.9, 1.1
-
-
-# Compute mean, std, and percentage valid in [0.9, 1.1]
-def stats_and_percent(arr, low, high):
-    mu = arr.mean()
-    sigma = arr.std()
-    pct = 100 * np.mean((arr >= low) & (arr <= high))
-    return mu, sigma, pct
-
-
-m_fixed, s_fixed, p_fixed = stats_and_percent(chi_fixed, lower, upper)
-m_s1, s_s1, p_s1 = stats_and_percent(chi_sens1, lower, upper)
-m_s2, s_s2, p_s2 = stats_and_percent(chi_sens2, lower, upper)
-
-# Shared bins
-all_chi = np.concatenate([chi_fixed, chi_sens1, chi_sens2])
-bins = np.linspace(all_chi.min(), all_chi.max(), 30)
-
-plt.figure(figsize=(8, 6))
-
-# Histograms
-plt.hist(
-    chi_fixed,
-    bins=bins,
-    alpha=0.5,
-    color="C0",
-    label=rf"Fixed-PDF: $\mu={m_fixed:.2f},\ \sigma={s_fixed:.2f},\ {p_fixed:.1f}\%\ \mathrm{{valid}}$",
-)
-plt.hist(
-    chi_sens1,
-    bins=bins,
-    alpha=0.5,
-    color="C1",
-    label=rf"Sens.\ ansatz1: $\mu={m_s1:.2f},\ \sigma={s_s1:.2f},\ {p_s1:.1f}\%\ \mathrm{{valid}}$",
-)
-plt.hist(
-    chi_sens2,
-    bins=bins,
-    alpha=0.5,
-    color="C2",
-    label=rf"Sens.\ ansatz2: $\mu={m_s2:.2f},\ \sigma={s_s2:.2f},\ {p_s2:.1f}\%\ \mathrm{{valid}}$",
-)
-
-# Vertical lines at valid-region bounds
-plt.axvline(lower, color="k", linestyle="--")
-plt.axvline(upper, color="k", linestyle="--")
-
-# Vertical lines at means
-plt.axvline(m_fixed, color="C0", linestyle="-", linewidth=1.5)
-plt.axvline(m_s1, color="C1", linestyle="-", linewidth=1.5)
-plt.axvline(m_s2, color="C2", linestyle="-", linewidth=1.5)
-
-# Labels and title
-plt.xlabel(r"$\chi^2/\mathrm{pt}$", fontsize=12)
-plt.ylabel("Count", fontsize=12)
-plt.title(r"$\chi^2/\mathrm{pt}$ Distributions and Valid-Region Fractions", fontsize=14)
-
-plt.legend(fontsize=9)
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.show()
-
-
-# %%
-# ---------------------------------------------------------------------
-# 9) PLOTTING: alpha vs. beta — SINGLE PLOT WITH UNCERTAINTY ELLIPSES
-# ---------------------------------------------------------------------
+# alpha vs. beta — SINGLE PLOT WITH UNCERTAINTY ELLIPSES
 
 
 # Helper to plot a 1sigma confidence ellipse
@@ -1261,9 +1173,8 @@ plt.savefig(image_dir / "alpha_beta_comp.png", bbox_inches="tight")
 plt.show()
 
 # %%
-# ---------------------------------------------------------------------
-# 9b) PLOTTING: alpha & beta distributions by ansatz and C_true (updated)
-# ---------------------------------------------------------------------
+# alpha & beta distributions by ansatz and C_true (updated)
+
 
 # 2 rows x 2 cols: rows=parameters (alpha, beta), cols=ansatzes
 grid_kw = {"wspace": 0, "hspace": 0.3}
@@ -1316,7 +1227,7 @@ plt.savefig(image_dir / "alpha_beta_histograms_with_ct_legend.png", bbox_inches=
 plt.show()
 
 # %%
-# --- 10) PLOTTING: Raw C_fit Histograms (touching panels) ---
+#  Raw C_fit Histograms
 fig, axes = plt.subplots(
     nrows=1,
     ncols=len(C_trues),
@@ -1326,7 +1237,6 @@ fig, axes = plt.subplots(
     gridspec_kw={"wspace": 0},  # no gap between panels
 )
 
-# Use default Matplotlib blue for ansatz2, keep orange for ansatz1
 ansatz_colors = {"ansatz1": "orange", "ansatz2": "C0"}
 
 for col_idx, C_true_val in enumerate(C_trues):
@@ -1406,8 +1316,7 @@ plt.savefig(image_dir / "histograms.png", bbox_inches="tight")
 plt.show()
 
 # %%
-# Plot 11 C-distribution, PDF-fixed vs. Joint-fit for both ansatz1 and ansatz2
-
+# C-distribution, PDF-fixed vs. Joint-fit for both ansatz1 and ansatz2
 
 # --- build fixed-PDF ensemble from fit_pseudo_replica ---
 f_list = df_results.loc[df_results["config_key"] == "fit_pseudo_replica", "f_raw_best"].to_numpy()
@@ -1502,5 +1411,6 @@ fig.suptitle(
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.savefig(image_dir / "moneyplot2_C_distribution_fixed.png", bbox_inches="tight")
 plt.show()
+
 
 # %%
